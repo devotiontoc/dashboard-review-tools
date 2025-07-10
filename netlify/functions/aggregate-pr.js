@@ -4,7 +4,7 @@ const { Octokit } = require("@octokit/rest");
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
 
-// --- Helper Functions (No changes here) ---
+// --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
     if (!tsStr) return null;
     return new Date(tsStr);
@@ -65,11 +65,26 @@ exports.handler = async function(event, context) {
 
         console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
 
+        const allCommentsList = Array.from(allItems.values());
         const findingsMap = {};
         const commentLengths = {};
         const reviewTimes = {};
 
-        for (const item of allItems.values()) {
+        // --- ✅ NEW TWO-PASS GROUPING LOGIC ---
+
+        // PASS 1: Identify all unique multi-line comment ranges.
+        const fileRanges = {}; // E.g., { 'path/to/file.js': [{ start: 9, end: 13 }, ...] }
+        allCommentsList.forEach(item => {
+            if (item.path && item.start_line && item.line !== item.start_line) {
+                if (!fileRanges[item.path]) {
+                    fileRanges[item.path] = [];
+                }
+                fileRanges[item.path].push({ start: item.start_line, end: item.line });
+            }
+        });
+
+        // PASS 2: Group all comments, checking against the ranges found in Pass 1.
+        for (const item of allCommentsList) {
             const author = item.user?.login;
             if (!author) continue;
 
@@ -78,6 +93,24 @@ exports.handler = async function(event, context) {
 
             const commentBody = item.body || '';
             if (!commentBody) continue;
+
+            // --- Grouping Key Logic ---
+            let findingKey = "General PR Summary";
+            if (item.path && (item.line || item.start_line)) {
+                let representativeLine = item.start_line || item.line;
+                const rangesInFile = fileRanges[item.path] || [];
+
+                // Check if this comment's line falls within an established multi-line range.
+                for (const range of rangesInFile) {
+                    // Use item.line as it represents the comment's actual position.
+                    if (item.line >= range.start && item.line <= range.end) {
+                        representativeLine = range.start; // Group by the start of the range.
+                        break;
+                    }
+                }
+                findingKey = `${item.path}:${representativeLine}`;
+            }
+            // --- End Grouping Key Logic ---
 
             const timestampStr = item.submitted_at || item.created_at;
             const commentCreatedAt = parseIsoTimestamp(timestampStr);
@@ -99,15 +132,6 @@ exports.handler = async function(event, context) {
                 }
             }
 
-            const filePath = item.path;
-
-            // --- ✅ NEW GROUPING LOGIC ---
-            // A comment can be on a single line ('line') or a range ('start_line' to 'line').
-            // To group them, we use the start_line if it exists, otherwise we use the single line number.
-            const representativeLine = item.start_line || item.line;
-            const findingKey = (filePath && representativeLine) ? `${filePath}:${representativeLine}` : "General PR Summary";
-            // --- END NEW LOGIC ---
-
             if (!findingsMap[findingKey]) findingsMap[findingKey] = [];
             findingsMap[findingKey].push({
                 tool: currentTool,
@@ -120,6 +144,7 @@ exports.handler = async function(event, context) {
             commentLengths[currentTool].push(commentBody.length);
         }
 
+        // --- The rest of the script for processing and output remains the same ---
         const processedFindings = [];
         const categoryCounts = {};
         const toolFindingCounts = {};
