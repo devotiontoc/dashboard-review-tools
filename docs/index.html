@@ -3,104 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automated Code Review Dashboard</title>
+    <title>AI Reviewer Analysis Dashboard</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
 
-<header>
-    <h1>Automated Code Review Dashboard</h1>
-    <p>A dynamic aggregation of findings from multiple AI code review tools on a pull request.</p>
-</header>
-
-<main>
-    <section class="controls-container">
-        <div class="control-item">
-            <label for="pr-select">Select a Pull Request to Analyze:</label>
-            <select id="pr-select" name="pr-select">
-                <option>Loading PRs...</option>
-            </select>
+<div class="app-layout">
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-robot"></i>
+            <h2>AI Reviewer</h2>
         </div>
-        <button id="fetch-button" disabled>Fetch Analysis</button>
-        <div id="loader" class="loader" style="display: none;"></div>
-    </section>
-
-    <!-- History Section (Initially Hidden) -->
-    <section id="history-section" style="display: none;">
-        <h2>Historical Performance Trends</h2>
-        <div class="charts-grid history-charts">
-            <section class="chart-container">
-                <h3>Findings Over Time</h3>
-                <div class="chart-wrapper"><canvas id="historyFindingsChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h3>Novelty Score Over Time (%)</h3>
-                <div class="chart-wrapper"><canvas id="historyNoveltyChart"></canvas></div>
-            </section>
+        <nav class="sidebar-nav">
+            <a href="#dashboard" class="nav-link active" data-view="dashboard">
+                <i class="fas fa-chart-pie"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#history" class="nav-link" data-view="history">
+                <i class="fas fa-chart-line"></i>
+                <span>History</span>
+            </a>
+            <a href="#findings" class="nav-link" data-view="findings">
+                <i class="fas fa-search"></i>
+                <span>Detailed Findings</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer">
+            <p>Version 2.0</p>
         </div>
-    </section>
+    </aside>
 
-    <!-- Main Dashboard Content (Initially Hidden) -->
-    <div id="dashboard-content" style="display: none;">
-        <div class="charts-grid">
-            <section class="chart-container">
-                <h2>Total Findings by Tool</h2>
-                <div class="chart-wrapper"><canvas id="findingsByToolChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Findings by Category</h2>
-                <div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Comment Verbosity (Avg. Chars)</h2>
-                <div class="chart-wrapper"><canvas id="commentVerbosityChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Findings per File</h2>
-                <div class="chart-wrapper"><canvas id="findingsByFileChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Avg. Review Speed (seconds)</h2>
-                <div class="chart-wrapper"><canvas id="reviewSpeedChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Top 3 Overlaps by Tool Pair</h2>
-                <div class="chart-wrapper"><canvas id="suggestionOverlapChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Novelty Score (% Unique Findings)</h2>
-                <div class="chart-wrapper"><canvas id="noveltyScoreChart"></canvas></div>
-            </section>
-            <section class="chart-container">
-                <h2>Findings per 100 Lines of Code</h2>
-                <div class="chart-wrapper"><canvas id="findingsDensityChart"></canvas></div>
-            </section>
-            <section class="chart-container full-width">
-                <h2>Tool Strength Profile</h2>
-                <div class="chart-wrapper"><canvas id="toolStrengthChart"></canvas></div>
-            </section>
-        </div>
-
-        <section id="detailed-findings">
-            <div class="findings-header">
-                <h2>Consolidated Findings</h2>
-                <div class="view-toggle">
-                    <label>View Mode:</label>
-                    <button id="view-side-by-side" class="active" title="Show each review in its own card">Cards</button>
-                    <button id="view-unified" title="Combine suggestions for the same code block into one view">Unified Diff</button>
+    <div class="main-content">
+        <header class="top-bar">
+            <div class="controls-container">
+                <div class="control-item">
+                    <label for="pr-select"><i class="fas fa-pull-request"></i> Select Pull Request</label>
+                    <select id="pr-select" name="pr-select">
+                        <option>Loading PRs...</option>
+                    </select>
                 </div>
+                <button id="fetch-button" disabled>
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Fetch Analysis</span>
+                </button>
+                <div id="loader" class="loader" style="display: none;"></div>
             </div>
-            <!-- Findings will be rendered here by script.js -->
-        </section>
-    </div>
+            <div id="error-display" class="error-message" style="display: none;"></div>
+        </header>
 
-    <div id="error-display" class="error-message" style="display: none;"></div>
-</main>
+        <main class="content-area">
+
+            <section id="view-initial" class="app-view">
+                <div class="welcome-container">
+                    <i class="fas fa-rocket"></i>
+                    <h1>Welcome to the AI Reviewer Dashboard</h1>
+                    <p>Please select a Pull Request and click "Fetch Analysis" to begin.</p>
+                </div>
+            </section>
+
+            <section id="view-dashboard" class="app-view" style="display: none;">
+                <div class="charts-grid">
+                    <div class="chart-container kpi-card">
+                        <h2>Total Findings</h2>
+                        <p id="kpi-total-findings">--</p>
+                    </div>
+                    <div class="chart-container kpi-card">
+                        <h2>Lines Analyzed</h2>
+                        <p id="kpi-lines-analyzed">--</p>
+                    </div>
+                    <div class="chart-container kpi-card">
+                        <h2>Avg. Novelty</h2>
+                        <p id="kpi-avg-novelty">--%</p>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Findings by Tool</h3>
+                        <div class="chart-wrapper"><canvas id="findingsByToolChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Findings by Category</h3>
+                        <div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div>
+                    </div>
+                    <div class="chart-container large-chart">
+                        <h3>Tool Strength Profile</h3>
+                        <div class="chart-wrapper"><canvas id="toolStrengthChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Novelty Score (%)</h3>
+                        <div class="chart-wrapper"><canvas id="noveltyScoreChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Findings Density</h3>
+                        <div class="chart-wrapper"><canvas id="findingsDensityChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-history" class="app-view" style="display: none;">
+                <h2>Historical Performance Trends</h2>
+                <div class="charts-grid single-col-grid">
+                    <div class="chart-container">
+                        <h3>Findings Over Time</h3>
+                        <div class="chart-wrapper"><canvas id="historyFindingsChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Novelty Score Over Time (%)</h3>
+                        <div class="chart-wrapper"><canvas id="historyNoveltyChart"></canvas></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="view-findings" class="app-view" style="display: none;">
+                <div class="findings-header">
+                    <h2>Consolidated Findings</h2>
+                    <div class="view-toggle">
+                        <label>View Mode:</label>
+                        <button id="view-side-by-side" class="active" title="Show each review in its own card">Cards</button>
+                        <button id="view-unified" title="Combine suggestions for the same code block">Unified</button>
+                    </div>
+                </div>
+                <div id="detailed-findings-container">
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script>
-<script src="script.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js"></script> <script src="script.js"></script>
 
 </body>
 </html>

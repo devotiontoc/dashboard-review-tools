@@ -1,340 +1,229 @@
-/* General Styles */
+/* --- Global Setup & CSS Variables --- */
 :root {
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-    --color-bg: #111827;
-    --color-bg-card: #1F2937;
-    --color-border: #374151;
-    --color-text-primary: #F9FAFB;
-    --color-text-secondary: #9CA3AF;
-    --color-text-header: #FFFFFF;
-    --color-accent: #38BDF8;
-    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-    --border-radius: 8px;
+    --color-bg-dark: #0D1117;
+    --color-bg-med: #161B22;
+    --color-bg-light: #21262D;
+    --color-border: #30363D;
+    --color-text-primary: #C9D1D9;
+    --color-text-secondary: #8B949E;
+    --color-text-header: #F0F6FC;
+    --color-accent: #58A6FF;
+    --color-accent-hover: #79C0FF;
+    --color-danger: #F85149;
+    --color-success: #3FB950;
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
+    --border-radius: 6px;
+    --transition-speed: 0.2s ease;
 }
+
 body {
-    background-color: var(--color-bg);
+    background-color: var(--color-bg-dark);
     color: var(--color-text-primary);
     font-family: var(--font-sans);
-    line-height: 1.6;
+    line-height: 1.5;
     margin: 0;
-    padding: 0;
+    font-size: 16px;
+    overflow-x: hidden;
 }
-header {
-    text-align: center;
-    padding: 3rem 1rem;
-    border-bottom: 1px solid var(--color-border);
+
+/* --- App Layout --- */
+.app-layout {
+    display: flex;
+    height: 100vh;
 }
-main {
-    max-width: 1200px;
-    margin: 2rem auto;
-    padding: 0 1rem;
+
+.sidebar {
+    width: 240px;
+    background-color: var(--color-bg-dark);
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    padding: 1.5rem 0;
+    transition: width var(--transition-speed);
 }
-h2 {
-    font-size: 1.75rem;
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem 1.5rem 1.5rem;
     color: var(--color-text-header);
     border-bottom: 1px solid var(--color-border);
-    padding-bottom: 0.75rem;
-    margin: 0 0 1.5rem 0;
 }
-#detailed-findings h2 {
-    border: none;
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
-/* --- Controls & Loader --- */
-.controls-container {
-    background-color: var(--color-bg-card);
-    padding: 1.5rem 2rem;
-    border-radius: var(--border-radius);
+.sidebar-header i { font-size: 1.5rem; margin-right: 1rem; color: var(--color-accent); }
+.sidebar-header h2 { font-size: 1.25rem; margin: 0; }
+.sidebar-nav { margin-top: 1.5rem; flex-grow: 1; }
+.nav-link {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-}
-.control-item {
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-}
-.control-item label {
-    font-size: 0.9rem;
+    padding: 0.85rem 1.5rem;
     color: var(--color-text-secondary);
-    margin-bottom: 0.5rem;
+    text-decoration: none;
+    font-weight: 500;
+    border-left: 3px solid transparent;
+    transition: all var(--transition-speed);
 }
-#pr-select {
-    padding: 0.6rem;
-    border-radius: 6px;
-    background-color: var(--color-bg);
-    color: var(--color-text-primary);
-    border: 1px solid var(--color-border);
-    font-size: 1rem;
-    width: 100%;
+.nav-link:hover { background-color: var(--color-bg-med); color: var(--color-text-header); }
+.nav-link.active {
+    color: var(--color-text-header);
+    border-left-color: var(--color-accent);
+    background-color: var(--color-bg-light);
 }
-#fetch-button {
-    padding: 0.7rem 1.5rem;
-    background-color: var(--color-accent);
-    color: #000;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 1rem;
-    transition: background-color 0.2s;
-}
-#fetch-button:disabled {
-    background-color: var(--color-border);
-    cursor: not-allowed;
-    color: var(--color-text-secondary);
-}
-#fetch-button:not(:disabled):hover {
-    background-color: #67d4ff;
-}
-.loader {
-    border: 5px solid var(--color-border);
-    border-top: 5px solid var(--color-accent);
-    border-radius: 50%;
-    width: 30px;
-    height: 30px;
-    animation: spin 1s linear infinite;
-}
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-.error-message {
-    background-color: #441c1c;
-    color: #f8b4b4;
-    border: 1px solid #b93636;
-    padding: 1.5rem;
-    border-radius: var(--border-radius);
-    text-align: center;
-}
-
-/* --- Charts --- */
-.charts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
-}
-.chart-container {
-    background-color: var(--color-bg-card);
-    padding: 2rem;
-    border-radius: var(--border-radius);
-    border: 1px solid var(--color-border);
-    box-shadow: var(--shadow-md);
-    min-height: 400px;
-    display: flex;
-    flex-direction: column;
-}
-.chart-wrapper {
-    position: relative;
-    flex-grow: 1;
-}
-
-/* --- Findings Cards & Side-by-Side View --- */
-.finding-card {
-    background-color: var(--color-bg-card);
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    margin-bottom: 1.5rem;
-    box-shadow: var(--shadow-md);
-    overflow: hidden; /* Prevents margin collapse and contains children */
-}
-.finding-card-header {
-    padding: 1rem 1.5rem;
-    border-bottom: 1px solid var(--color-border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 1rem;
-}
-.category {
+.nav-link i { width: 30px; font-size: 1rem; }
+.sidebar-footer {
+    padding: 1rem 1.5rem 0 1.5rem;
     font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.3rem 0.6rem;
-    border-radius: 9999px;
-    text-transform: uppercase;
-    white-space: nowrap;
-}
-.category.security { background-color: #991B1B; }
-.category.performance { background-color: #166534; }
-.category.bug { background-color: #9A3412; }
-.category.style-best-practice { background-color: #1E40AF; }
-
-.finding-card-body {
-    padding: 1.5rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem;
-}
-
-/* --- FIX: Added flex properties to make cards resize properly --- */
-.tool-review {
-    flex: 1; /* Allows cards to grow to fill available space */
-    min-width: 350px; /* Prevents cards from becoming too narrow */
-    border: 1px solid var(--color-border);
-    border-radius: var(--border-radius);
-    background-color: var(--color-bg);
-}
-
-/* --- FIX: This entire conflicting rule has been removed. --- */
-/*
-.tool-review + .tool-review {
-    margin-top: 1.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--color-border);
-}
-*/
-
-.tool-review h4 {
-    margin: 0;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--color-border);
-    border-left: 4px solid;
-}
-.tool-review blockquote {
-    margin: 0;
-    padding: 1rem;
-    white-space: pre-wrap;
-    font-size: 0.9rem;
-}
-.tool-review.CodeRabbit h4 { border-color: #38BDF8; }
-.tool-review.BitoAI h4 { border-color: #F472B6; }
-.tool-review.Codacy h4 { border-color: #A78BFA; }
-.tool-review.GitHub-Copilot h4 { border-color: #34D399; }
-.tool-review.devotiontoc h4 { border-color: #FBBF24; }
-
-.no-data-message {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
     color: var(--color-text-secondary);
-    width: 100%; /* Ensure it takes full width inside the flex container */
+    text-align: center;
 }
-
-/* --- Diff Viewer Styles --- */
-.diff-container {
-    margin: 1rem;
-    border-radius: 6px;
+.main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
-.d2h-file-header { display: none; }
-.d2h-diff-table { font-family: var(--font-mono); }
-.d2h-code-line { background-color: var(--color-bg-card); }
-.d2h-code-line-ctn { background-color: var(--color-bg-card) !important; color: var(--color-text-secondary); }
-.d2h-code-side-linenumber { background-color: var(--color-bg-card); }
-.d2h-code-line-ins { background-color: rgba(22, 163, 74, 0.15); }
-.d2h-code-side-line-ins { background-color: rgba(22, 163, 74, 0.1); }
-.d2h-code-line-del { background-color: rgba(220, 38, 38, 0.15); }
-.d2h-code-side-line-del { background-color: rgba(220, 38, 38, 0.1); }
-
-.novelty-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.2rem 0.5rem;
-    border-radius: 9999px;
-    background-color: var(--color-accent);
-    color: var(--color-bg);
-    margin-left: 0.75rem;
-    vertical-align: middle;
-}
-
-/* Also, make the h4 a flex container to align the badge nicely */
-.tool-review h4 {
-    margin: 0;
-    padding: 0.75rem 1rem;
+.top-bar {
+    background-color: var(--color-bg-med);
+    padding: 1rem 1.5rem;
     border-bottom: 1px solid var(--color-border);
-    border-left: 4px solid;
-    /* ✅ NEW flex properties */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-shrink: 0;
 }
-#history-section h2 {
-    text-align: center;
-    border-bottom: none;
-    margin-bottom: 2rem;
-}
-.history-charts h3 {
-    font-size: 1.2rem;
-    color: var(--color-text-secondary);
-    text-align: center;
-    margin: -1rem 0 1.5rem;
+.content-area {
+    padding: 1.5rem;
+    overflow-y: auto;
+    flex-grow: 1;
 }
 
-/* --- Findings View Toggle --- */
-.findings-header {
+/* --- Header Controls --- */
+.controls-container {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: 1rem;
+    gap: 1rem;
+    flex-wrap: wrap;
 }
-.findings-header h2 {
-    border-bottom: none;
-    margin: 0;
+.control-item { display: flex; align-items: center; gap: 0.5rem; }
+.control-item label { font-size: 0.9rem; color: var(--color-text-secondary); font-weight: 500; }
+#pr-select {
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--border-radius);
+    background-color: var(--color-bg-light);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    font-size: 0.9rem;
+    min-width: 300px;
 }
-.view-toggle {
+#fetch-button {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    background-color: var(--color-bg);
-    padding: 0.25rem;
-    border-radius: 6px;
-}
-.view-toggle label {
-    font-size: 0.9rem;
-    color: var(--color-text-secondary);
-    margin-right: 0.5rem;
-}
-.view-toggle button {
-    border: none;
     padding: 0.5rem 1rem;
-    background-color: transparent;
-    color: var(--color-text-secondary);
-    font-weight: 600;
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.2s;
-}
-.view-toggle button.active {
     background-color: var(--color-accent);
-    color: var(--color-bg);
+    color: var(--color-bg-dark);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color var(--transition-speed);
+}
+#fetch-button:not(:disabled):hover { background-color: var(--color-accent-hover); }
+#fetch-button:disabled { background-color: var(--color-bg-light); color: var(--color-text-secondary); border-color: var(--color-border); cursor: not-allowed; }
+.loader { border: 4px solid var(--color-border); border-top: 4px solid var(--color-accent); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.error-message { background-color: rgba(248, 81, 73, 0.1); color: var(--color-danger); border: 1px solid var(--color-danger); padding: 1rem; border-radius: var(--border-radius); margin-top: 1rem; }
+
+/* --- Views & Welcome Screen --- */
+.app-view { width: 100%; }
+.welcome-container { text-align: center; padding: 4rem 1rem; color: var(--color-text-secondary); }
+.welcome-container i { font-size: 4rem; color: var(--color-accent); margin-bottom: 1.5rem; }
+.welcome-container h1 { font-size: 2rem; color: var(--color-text-header); }
+
+/* --- Charts & Dashboard Grid --- */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+.single-col-grid { grid-template-columns: 1fr; }
+.chart-container {
+    background-color: var(--color-bg-med);
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-md);
+    min-height: 350px;
+    display: flex;
+    flex-direction: column;
+}
+.large-chart { grid-column: 1 / -1; } /* Make chart span full width */
+.chart-container h3 {
+    margin: 0 0 1.5rem 0;
+    font-size: 1.1rem;
+    color: var(--color-text-header);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.75rem;
+}
+.chart-wrapper { position: relative; flex-grow: 1; }
+.kpi-card {
+    min-height: auto;
+    text-align: center;
+}
+.kpi-card h2 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+.kpi-card p {
+    font-size: 2.5rem;
+    margin: 0;
+    font-weight: 700;
+    color: var(--color-text-header);
 }
 
-/* --- Unified Diff View --- */
-.unified-diff-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-    margin-top: 1rem;
-}
-.unified-diff-table td {
-    padding: 0.3rem 0.5rem;
-    border-bottom: 1px solid var(--color-border);
-}
-.unified-diff-table .line-num {
-    color: var(--color-text-secondary);
-    text-align: right;
-    width: 40px;
-}
-.unified-diff-table .line-orig {
-    background-color: rgba(220, 38, 38, 0.15);
-}
-.unified-diff-table .line-sugg {
-    background-color: rgba(22, 163, 74, 0.15);
-}
-.unified-diff-table .tool-name-cell {
-    font-weight: bold;
-    padding-left: 2rem;
-    width: 150px;
-}
+/* --- Detailed Findings View --- */
+.findings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 1rem; }
+.findings-header h2 { margin: 0; font-size: 1.5rem; }
+.view-toggle { display: flex; align-items: center; gap: 0.25rem; background-color: var(--color-bg-dark); padding: 0.25rem; border-radius: var(--border-radius); border: 1px solid var(--color-border); }
+.view-toggle label { font-size: 0.9rem; color: var(--color-text-secondary); margin: 0 0.5rem; }
+.view-toggle button { border: none; padding: 0.4rem 0.8rem; background-color: transparent; color: var(--color-text-secondary); font-weight: 600; cursor: pointer; border-radius: 4px; transition: all var(--transition-speed); }
+.view-toggle button.active { background-color: var(--color-accent); color: var(--color-bg-dark); }
+.no-data-message { text-align: center; padding: 3rem; color: var(--color-text-secondary); }
+
+/* Card Styles */
+.finding-card { background-color: var(--color-bg-med); border: 1px solid var(--color-border); border-radius: var(--border-radius); margin-bottom: 1.5rem; box-shadow: var(--shadow-md); overflow: hidden; }
+.finding-card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
+.finding-card-header h3 { font-family: var(--font-mono); margin: 0; font-size: 1.1rem; }
+.category { font-size: 0.75rem; font-weight: 600; padding: 0.3rem 0.6rem; border-radius: 9999px; text-transform: uppercase; }
+.category.security { background-color: #DA3633; color: white; }
+.category.performance { background-color: #238636; color: white; }
+.category.bug { background-color: #D73A49; color: white; }
+.category.style-best-practice { background-color: #1F6FEB; color: white; }
+.finding-card-body { padding: 0; }
+.tool-review { border-top: 1px solid var(--color-border); }
+.tool-review:first-child { border-top: none; }
+.tool-review h4 { margin: 0; padding: 0.75rem 1.5rem; background: var(--color-bg-light); border-bottom: 1px solid var(--color-border); border-left: 4px solid; display: flex; justify-content: space-between; align-items: center; font-size: 1rem; }
+.tool-review blockquote { margin: 0; padding: 1rem 1.5rem; white-space: pre-wrap; font-size: 0.95rem; }
+.novelty-badge { font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 9999px; background-color: var(--color-accent); color: var(--color-bg-dark); }
+.diff-container { margin: 1rem 1.5rem; border-radius: var(--border-radius); overflow: hidden; border: 1px solid var(--color-border); }
+.d2h-file-header { display: none; }
+.d2h-d-none { display: none; } /* Hide file list header */
+.d2h-code-line-ctn { font-family: var(--font-mono); font-size: 0.85rem; background-color: transparent !important; color: var(--color-text-secondary); }
+.d2h-code-side-linenumber { background-color: var(--color-bg-med) !important; }
+.d2h-code-line-ins { background-color: rgba(63, 185, 80, 0.15); }
+.d2h-code-line-del { background-color: rgba(248, 81, 73, 0.15); }
+
+/* Unified Diff View */
+.unified-diff-container { padding: 1rem 1.5rem; }
+.unified-diff-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.9rem; margin-top: 1rem; }
+.unified-diff-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--color-border); }
+.unified-diff-table tr:last-child td { border-bottom: none; }
+.unified-diff-table .line-num { color: var(--color-text-secondary); text-align: right; width: 30px; user-select: none; }
+.unified-diff-table .line-code { white-space: pre; }
+.unified-diff-table .line-orig td:first-child { background: rgba(248, 81, 73, 0.1); }
+.unified-diff-table .line-sugg td:first-child { background: rgba(63, 185, 80, 0.1); }
+.unified-diff-table .tool-name-cell { padding-left: 1rem; font-weight: bold; width: 150px; }
+.other-comments-container { padding: 1.5rem; border-top: 1px dashed var(--color-border); }
+.other-comments-container h5 { margin: 0 0 1rem 0; color: var(--color-text-secondary); }
+.tool-review-small { border-left: 3px solid; padding-left: 1rem; margin-bottom: 1rem; }
+.tool-review-small h4 { font-size: 0.9rem; margin: 0; display: flex; justify-content: space-between; }
+.tool-review-small blockquote { margin: 0.5rem 0 0 0; padding: 0; font-size: 0.9rem; }
