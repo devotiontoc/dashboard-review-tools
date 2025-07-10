@@ -127,13 +127,12 @@ exports.handler = async function(event, context) {
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
             if (reviewTools.size > 1) {
-                const toolPairs = Combinatorics.combinations(Array.from(reviewTools).sort(), 2);
+                const toolPairs = Combinatorics.combination(Array.from(reviewTools).sort(), 2);
                 toolPairs.forEach(pair => {
                     const key = pair.join(' & ');
                     overlapCounts[key] = (overlapCounts[key] || 0) + 1;
                 });
             }
-
             const allCommentsText = reviewsList.map(r => r.comment).join(" ");
             const category = categorizeComment(allCommentsText);
             categoryCounts[category] = (categoryCounts[category] || 0) + 1;
