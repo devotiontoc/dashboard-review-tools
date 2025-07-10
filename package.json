@@ -6,6 +6,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@netlify/neon": "^0.1.0",
     "@octokit/rest": "^20.0.2",
     "string-similarity": "^4.0.4"
   }
