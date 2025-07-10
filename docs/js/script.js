@@ -332,7 +332,70 @@ document.addEventListener('DOMContentLoaded', () => {
     function showSkeletons(show) { document.querySelectorAll('.chart-wrapper').forEach(wrapper => { const canvas = wrapper.querySelector('canvas'); let skeleton = wrapper.querySelector('.skeleton'); if (show) { if (canvas) canvas.style.display = 'none'; if (!skeleton) { skeleton = document.createElement('div'); skeleton.className = 'skeleton'; wrapper.appendChild(skeleton); } } else { if (canvas) canvas.style.display = 'block'; skeleton?.remove(); } }); }
     function filterDataByTool(dataArray, allLabels, activeLabelsSet) { const filtered = { labels: [], data: [] }; allLabels.forEach((label, i) => { if (activeLabelsSet.has(label)) { filtered.labels.push(label); if (dataArray && dataArray[i] !== undefined) { filtered.data.push(dataArray[i]); } } }); return filtered; }
     function renderFindingsByToolChart(results, filters) { const ctx = document.getElementById('findingsByToolChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_tool; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.findingsByTool = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } } }); }
-    function renderFindingsByCategoryChart(results, filters) { const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_category; if (!ctx || !chartData?.labels?.length) return; activeCharts.findingsByCategory = new Chart(ctx, { type: 'doughnut', data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }] }, options: { plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } }, onClick: (_, elements) => { if (elements.length > 0 && activeCharts.findingsByCategory) { const category = activeCharts.findingsByCategory.data.labels[elements[0].index]; activeFilters.category = activeFilters.category === category ? null : category; tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters); } } } }); }
+    function renderFindingsByCategoryChart(results, filters) {
+        const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
+        if (!ctx) return;
+
+        // Manually calculate category counts from the currently filtered findings
+        const categoryCounts = results.findings.reduce((acc, finding) => {
+            // Check if any of this finding's reviews pass the tool filter
+            const hasVisibleReview = finding.reviews.some(review => filters.tools.has(review.tool));
+
+            if (hasVisibleReview) {
+                acc[finding.category] = (acc[finding.category] || 0) + finding.reviews.filter(r => filters.tools.has(r.tool)).length;
+            }
+            return acc;
+        }, {});
+
+        const labels = Object.keys(categoryCounts);
+        const data = Object.values(categoryCounts);
+
+        // If there's no data after filtering, don't render the chart
+        if (labels.length === 0) {
+            if (activeCharts.findingsByCategory) {
+                activeCharts.findingsByCategory.destroy();
+                delete activeCharts.findingsByCategory;
+            }
+            // Optional: show a message
+            ctx.canvas.parentElement.innerHTML = '<p class="no-data-message">No findings for selected tools.</p>';
+            return;
+        } else {
+            // If we are re-rendering, ensure the canvas is visible
+            ctx.canvas.parentElement.innerHTML = '<canvas id="findingsByCategoryChart"></canvas>';
+            const newCtx = document.getElementById('findingsByCategoryChart').getContext('2d');
+        }
+
+
+        if (activeCharts.findingsByCategory) {
+            activeCharts.findingsByCategory.data.labels = labels;
+            activeCharts.findingsByCategory.data.datasets[0].data = data;
+            activeCharts.findingsByCategory.update();
+        } else {
+            activeCharts.findingsByCategory = new Chart(document.getElementById('findingsByCategoryChart').getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939', '#A371F7']
+                    }]
+                },
+                options: {
+                    plugins: {
+                        title: { display: true, text: 'Findings by Category (Click to Filter)' },
+                        legend: { position: 'right' }
+                    },
+                    onClick: (_, elements) => {
+                        if (elements.length > 0 && activeCharts.findingsByCategory) {
+                            const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
+                            activeFilters.category = activeFilters.category === category ? null : category;
+                            tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters);
+                        }
+                    }
+                }
+            });
+        }
+    }
     function renderToolStrengthChart(results, filters) { const ctx = document.getElementById('toolStrengthChart')?.getContext('2d'); const chartData = results.summary_charts.tool_strength_profile; if (!ctx || !chartData) return; const { tool_names, categories, data } = chartData; const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1); const filteredLabels = toolIndices.map(i => tool_names[i]); const filteredData = toolIndices.map(i => data[i]); const chartConfig = { type: 'bar', options: { scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } } } }; if (filters.category) { const categoryIndex = categories.indexOf(filters.category); chartConfig.data = { labels: filteredLabels, datasets: (categoryIndex > -1) ? [{ label: filters.category, data: filteredData.map(d => d[categoryIndex]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5], }] : [] }; } else { chartConfig.data = { labels: filteredLabels, datasets: categories.map((cat, i) => ({ label: cat, data: filteredData.map(d => d[i]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5], })) }; } if (activeCharts.toolStrength) { activeCharts.toolStrength.data = chartConfig.data; activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text; activeCharts.toolStrength.update(); } else { activeCharts.toolStrength = new Chart(ctx, chartConfig); } }
     function renderFindingsByFileChart(results, filters) { const ctx = document.getElementById('findingsByFileChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_file; if (!ctx || !chartData?.labels?.length) return; activeCharts.findingsByFile = new Chart(ctx, { type: 'bar', data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } } }); }
     function renderNoveltyScoreChart(results, filters) { const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d'); const chartData = results.summary_charts.novelty_score; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.noveltyScore = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } } }); }
@@ -355,6 +418,14 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.labels.padding = 20;
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
+
+        Chart.defaults.plugins.legend.labels.color = 'var(--color-text-primary)';
+        Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
+        Chart.defaults.scales.category.ticks.color = 'var(--color-text-secondary)';
+        Chart.defaults.scales.linear.ticks.color = 'var(--color-text-secondary)';
+
+        Chart.defaults.plugins.legend.position = 'bottom';
+        Chart.defaults.plugins.legend.labels.boxWidth = 12;
 
         // Attach main event listeners
         fetchButton.addEventListener('click', fetchAnalysis);
