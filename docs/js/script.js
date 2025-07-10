@@ -124,6 +124,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function setFindingsViewMode(mode) {
+        currentFindingsViewMode = mode;
+
+        // Update button active state
+        viewSideBySideBtn.classList.toggle('active', mode === 'side-by-side');
+        viewUnifiedBtn.classList.toggle('active', mode === 'unified');
+
+        // Re-render the findings view if data is available
+        if (currentAnalysisResults) {
+            renderFindings(currentAnalysisResults, activeFilters);
+        }
+    }
+
     function toggleLoading(isLoading) {
         if(loader) loader.style.display = isLoading ? 'block' : 'none';
         if(fetchButton) fetchButton.disabled = isLoading;
@@ -174,7 +187,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const filteredFindings = results.findings.flatMap(f => f.reviews).filter(r => filters.tools.has(r.tool));
             const totalFindings = filteredFindings.length;
             const novelScores = filteredFindings.filter(r => r.is_novel).length;
-            // FIX: Added initialValue (0) to reduce to prevent error on empty array.
             const avgNovelty = totalFindings > 0 ? (novelScores / totalFindings) * 100 : 0;
             if(kpiTotalFindings) kpiTotalFindings.textContent = totalFindings;
             if(kpiLinesAnalyzed) kpiLinesAnalyzed.textContent = results.metadata.lines_changed;
@@ -240,40 +252,49 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'finding-card';
 
-        // Separate reviews into those with code suggestions and those without
-        const reviewsWithSuggestions = finding.reviews.filter(r => r.suggested_code && r.original_code);
-        const reviewsWithoutSuggestions = finding.reviews.filter(r => !r.suggested_code || !r.original_code);
+        // Group reviews with suggestions by their exact original_code
+        const suggestionsByOrigin = new Map();
+        const reviewsWithoutSuggestions = [];
 
-        // Use the first review's original_code as the base for the diff
-        const originalCode = reviewsWithSuggestions[0]?.original_code || '';
-
-        // --- 1. Build the Unified Diff Table ---
-        let unifiedDiffHTML = `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
-
-        // Add original code lines (marked with '-')
-        originalCode.split('\n').forEach(line => {
-            unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+        finding.reviews.forEach(review => {
+            if (review.suggested_code && review.original_code) {
+                if (!suggestionsByOrigin.has(review.original_code)) {
+                    suggestionsByOrigin.set(review.original_code, []);
+                }
+                suggestionsByOrigin.get(review.original_code).push(review);
+            } else {
+                reviewsWithoutSuggestions.push(review);
+            }
         });
 
-        // Add suggested code lines from each tool (marked with '+')
-        reviewsWithSuggestions.forEach(review => {
-            const toolColor = toolColorMap.get(review.tool) || '#8B949E';
-            review.suggested_code.split('\n').forEach((line, i) => {
-                // Display the tool's name only on the first line of its suggestion
-                const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
-                unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+        let unifiedDiffHTML = '';
+        // For each unique block of original code, create a diff table
+        suggestionsByOrigin.forEach((reviews, originalCode) => {
+            unifiedDiffHTML += `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
+
+            // Add original code lines (marked with '-')
+            originalCode.split('\n').forEach(line => {
+                unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
             });
-        });
-        unifiedDiffHTML += `</tbody></table></div>`;
 
-        // --- 2. Build the "Additional Comments" Section ---
+            // Add suggested code lines from each tool for this block
+            reviews.forEach(review => {
+                const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+                review.suggested_code.split('\n').forEach((line, i) => {
+                    const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
+                    unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+                });
+            });
+            unifiedDiffHTML += `</tbody></table></div>`;
+        });
+
+        // Build the section for other comments
         let otherCommentsHTML = '';
         if (reviewsWithoutSuggestions.length > 0) {
             otherCommentsHTML = '<div class="other-comments-container"><h5>Additional Comments</h5>';
             reviewsWithoutSuggestions.forEach(review => {
                 const toolColor = toolColorMap.get(review.tool) || '#8B949E';
                 const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
-                // Strip out markdown code blocks from the comment text
                 const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
 
                 otherCommentsHTML += `
@@ -285,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
             otherCommentsHTML += '</div>';
         }
 
-        // --- 3. Assemble the Final Card ---
+        // Assemble the final card
         card.innerHTML = `
             <div class="finding-card-header">
                 <h3><code>${escapeHtml(finding.location)}</code></h3>
@@ -308,7 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
         destroyAllCharts();
         assignToolColors(results.metadata.tool_names);
 
-        // Each function is now self-contained and will not halt the script
         tryAndLog(renderFindingsByToolChart, 'FindingsByToolChart', results, filters);
         tryAndLog(renderFindingsByCategoryChart, 'FindingsByCategoryChart', results, filters);
         tryAndLog(renderToolStrengthChart, 'ToolStrengthChart', results, filters);
@@ -370,8 +390,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         return filtered;
     }
-
-    // --- Individual Chart Functions (with safety checks) ---
 
     function renderFindingsByToolChart(results, filters) {
         const ctx = document.getElementById('findingsByToolChart')?.getContext('2d');
@@ -592,14 +610,11 @@ document.addEventListener('DOMContentLoaded', () => {
             switchView(link.getAttribute('data-view'));
         }));
         tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab'))));
-        viewSideBySideBtn.addEventListener('click', () => {
-            currentFindingsViewMode = 'side-by-side';
-            if (currentAnalysisResults) renderFindings(currentAnalysisResults, activeFilters);
-        });
-        viewUnifiedBtn.addEventListener('click', () => {
-            currentFindingsViewMode = 'unified';
-            if (currentAnalysisResults) renderFindings(currentAnalysisResults, activeFilters);
-        });
+
+        // --- FIX 1: Corrected Event Listeners ---
+        // The event listeners now call a dedicated function to handle the view mode change.
+        viewSideBySideBtn.addEventListener('click', () => setFindingsViewMode('side-by-side'));
+        viewUnifiedBtn.addEventListener('click', () => setFindingsViewMode('unified'));
 
         getPullRequests();
         switchView('initial');
