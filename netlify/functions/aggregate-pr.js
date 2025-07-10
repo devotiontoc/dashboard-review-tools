@@ -4,7 +4,7 @@ const stringSimilarity = require("string-similarity");
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
-const SIMILARITY_THRESHOLD = 0.1; // similarity threshold
+const SIMILARITY_THRESHOLD = 0.7; // 70% similarity threshold
 
 // --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
@@ -66,8 +66,6 @@ exports.handler = async function(event, context) {
         const commentsFromReviews = await Promise.all(reviewCommentPromises);
         commentsFromReviews.flat().forEach(comment => allItems.set(comment.id, comment));
 
-        console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
-
         const allCommentsList = Array.from(allItems.values());
         const findingsMap = {};
         const commentLengths = {};
@@ -115,15 +113,26 @@ exports.handler = async function(event, context) {
             if (!reviewTimes[currentTool]) reviewTimes[currentTool] = [];
             reviewTimes[currentTool].push(timeToComment);
 
-            const suggestionMatch = /```suggestion\r?\n(.*?)\r?\n```/s.exec(commentBody);
+            const suggestionMatch = /```(suggestion|diff)\r?\n(.*?)\r?\n```/s.exec(commentBody);
             let originalCode = null, suggestedCode = null;
             if (suggestionMatch) {
-                suggestedCode = suggestionMatch[1];
-                if (item.diff_hunk) {
-                    originalCode = item.diff_hunk.split('\n')
-                        .filter(line => line.startsWith('-') && !line.startsWith('---'))
-                        .map(line => line.substring(1))
-                        .join('\n');
+                // The actual code is the second capture group
+                const suggestionContent = suggestionMatch[2];
+
+                // For diff blocks, we need to separate the added/removed lines
+                if (suggestionMatch[1] === 'diff') {
+                    const lines = suggestionContent.split('\n');
+                    originalCode = lines.filter(l => l.startsWith('-')).map(l => l.substring(1)).join('\n');
+                    suggestedCode = lines.filter(l => l.startsWith('+')).map(l => l.substring(1)).join('\n');
+                } else { // For suggestion blocks
+                    suggestedCode = suggestionContent;
+                    // Try to get original code from the diff_hunk if available
+                    if (item.diff_hunk) {
+                        originalCode = item.diff_hunk.split('\n')
+                            .filter(line => line.startsWith('-') && !line.startsWith('---'))
+                            .map(line => line.substring(1))
+                            .join('\n');
+                    }
                 }
             }
 
@@ -139,6 +148,7 @@ exports.handler = async function(event, context) {
             commentLengths[currentTool].push(commentBody.length);
         }
 
+        // --- The rest of the script for processing and output remains the same ---
         const novelFindingCount = {};
         for (const location in findingsMap) {
             const reviewsList = findingsMap[location];
@@ -177,7 +187,7 @@ exports.handler = async function(event, context) {
         const toolFindingCounts = {};
         const findingsPerFile = {};
         const overlapCounts = {};
-        const toolCategoryCounts = {}
+        const toolCategoryCounts = {};
 
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
@@ -258,7 +268,6 @@ exports.handler = async function(event, context) {
                     })
                 }
             },
-
             findings: processedFindings
         };
 
