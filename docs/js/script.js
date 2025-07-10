@@ -652,5 +652,6 @@ document.addEventListener('DOMContentLoaded', () => {
         getPullRequests();
         switchView('initial');
     }
-    });
     init();
+
+});
