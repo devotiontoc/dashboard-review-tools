@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Code Review Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
+</head>
+<body>
+
+<header>
+    <h1>Automated Code Review Dashboard</h1>
+    <p>A dynamic aggregation of findings from multiple AI code review tools on a pull request.</p>
+</header>
+
+<main>
+    <section class="controls-container">
+        <div class="control-item">
+            <label for="pr-select">Select a Pull Request to Analyze:</label>
+            <select id="pr-select" name="pr-select">
+                <option>Loading PRs...</option>
+            </select>
+        </div>
+        <button id="fetch-button" disabled>Fetch Analysis</button>
+        <div id="loader" class="loader" style="display: none;"></div>
+    </section>
+
+    <div id="dashboard-content" style="display: none;">
+        <div class="charts-grid">
+            <section class="chart-container">
+                <h2>Total Findings by Tool</h2>
+                <div class="chart-wrapper"><canvas id="findingsByToolChart"></canvas></div>
+            </section>
+            <section class="chart-container">
+                <h2>Findings by Category</h2>
+                <div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div>
+            </section>
+            <section class="chart-container">
+                <h2>Comment Verbosity (Avg. Chars)</h2>
+                <div class="chart-wrapper"><canvas id="commentVerbosityChart"></canvas></div>
+            </section>
+            <section class="chart-container">
+                <h2>Findings per File</h2>
+                <div class="chart-wrapper"><canvas id="findingsByFileChart"></canvas></div>
+            </section>
+            <section class="chart-container">
+                <h2>Avg. Review Speed (seconds)</h2>
+                <div class="chart-wrapper"><canvas id="reviewSpeedChart"></canvas></div>
+            </section>
+            <section class="chart-container">
+                <h2>Top 3 Overlaps by Tool Pair</h2>
+                <div class="chart-wrapper"><canvas id="suggestionOverlapChart"></canvas></div>
+            </section>
+        </div>
+        <section id="detailed-findings">
+            <h2>Consolidated Findings</h2>
+        </section>
+    </div>
+    <div id="error-display" class="error-message" style="display: none;"></div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script>
+<script src="script.js"></script>
+
+</body>
+</html>

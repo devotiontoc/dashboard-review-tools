@@ -1,0 +1,12 @@
+{
+  "name": "pr-review-dashboard",
+  "version": "1.0.0",
+  "description": "Dashboard to aggregate AI code review tool statistics",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2",
+    "js-combinatorics": "^2.1.2"
+  }
+}

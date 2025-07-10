@@ -1,0 +1,12 @@
+[build]
+command = "npm install"
+
+publish = "docs"
+
+functions = "netlify/functions"
+
+# This redirects all API calls starting with /api/ to the Netlify functions
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/:splat"
+status = 200

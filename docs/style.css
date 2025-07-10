@@ -1,0 +1,180 @@
+/* All of your original CSS from the prompt goes here... */
+:root {
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+    --color-bg: #111827;
+    --color-bg-card: #1F2937;
+    --color-border: #374151;
+    --color-text-primary: #F9FAFB;
+    --color-text-secondary: #9CA3AF;
+    --color-text-header: #FFFFFF;
+    --color-accent: #38BDF8;
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    --border-radius: 8px;
+}
+body {
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    margin: 0;
+    padding: 0;
+}
+header {
+    text-align: center;
+    padding: 3rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+}
+main {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+}
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+}
+.chart-container {
+    background-color: var(--color-bg-card);
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--color-border);
+    box-shadow: var(--shadow-md);
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+}
+.chart-wrapper {
+    position: relative;
+    flex-grow: 1;
+}
+h2 {
+    font-size: 1.75rem;
+    color: var(--color-text-header);
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.75rem;
+    margin: 0 0 1.5rem 0;
+}
+#detailed-findings h2 {
+    border: none;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+.finding-card {
+    background-color: var(--color-bg-card);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-md);
+}
+.finding-card-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.category {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+}
+.category.security { background-color: #991B1B; }
+.category.performance { background-color: #166534; }
+.category.bug { background-color: #9A3412; }
+.category.style-best-practice { background-color: #1E40AF; }
+.finding-card-body { padding: 1rem 1.5rem; }
+.tool-review + .tool-review { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--color-border); }
+.tool-review h4 { margin: 0 0 1rem; border-left: 3px solid; padding-left: 0.75rem; }
+.tool-review.CodeRabbit h4 { border-color: #38BDF8; }
+.tool-review.BitoAI h4 { border-color: #F472B6; }
+.tool-review.Codacy h4 { border-color: #A78BFA; }
+.tool-review.GitHub-Copilot h4 { border-color: #34D399; }
+.tool-review.devotiontoc h4 { border-color: #FBBF24; }
+.tool-review blockquote { margin: 0; padding: 1rem; background-color: var(--color-bg); border-radius: 6px; white-space: pre-wrap; font-size: 0.9rem; }
+.no-data-message { display: flex; justify-content: center; align-items: center; height: 100%; color: var(--color-text-secondary); }
+.diff-container { margin-top: 1rem; }
+.d2h-file-header { display: none; }
+.d2h-diff-table { font-family: var(--font-mono); }
+.d2h-code-line { background-color: var(--color-bg-card); }
+.d2h-code-line-ctn { background-color: var(--color-bg-card) !important; color: var(--color-text-secondary); }
+.d2h-code-side-linenumber { background-color: var(--color-bg-card); }
+.d2h-code-line-ins { background-color: rgba(22, 163, 74, 0.15); }
+.d2h-code-side-line-ins { background-color: rgba(22, 163, 74, 0.1); }
+.d2h-code-line-del { background-color: rgba(220, 38, 38, 0.15); }
+.d2h-code-side-line-del { background-color: rgba(220, 38, 38, 0.1); }
+
+/* --- NEW STYLES TO ADD --- */
+.controls-container {
+    background-color: var(--color-bg-card);
+    padding: 1.5rem 2rem;
+    border-radius: var(--border-radius);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+.control-item {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+.control-item label {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+}
+#pr-select {
+    padding: 0.6rem;
+    border-radius: 6px;
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
+    font-size: 1rem;
+    width: 100%;
+}
+#fetch-button {
+    padding: 0.7rem 1.5rem;
+    background-color: var(--color-accent);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: background-color 0.2s;
+}
+#fetch-button:disabled {
+    background-color: var(--color-border);
+    cursor: not-allowed;
+    color: var(--color-text-secondary);
+}
+#fetch-button:not(:disabled):hover {
+    background-color: #67d4ff;
+}
+.loader {
+    border: 5px solid var(--color-border);
+    border-top: 5px solid var(--color-accent);
+    border-radius: 50%;
+    width: 30px;
+    height: 30px;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.error-message {
+    background-color: #441c1c;
+    color: #f8b4b4;
+    border: 1px solid #b93636;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+}
