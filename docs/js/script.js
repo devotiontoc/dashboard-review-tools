@@ -1,15 +1,15 @@
 document.addEventListener('DOMContentLoaded', () => {
     // =================================================================
-    // 1. APPLICATION STATE
+    // 1. APPLICATION STATE & CONFIGURATION
     // =================================================================
     let currentAnalysisResults = null;
+    let activeCharts = {}; // Use an object to name charts for easier updates
+    let toolColorMap = new Map();
+    let currentFindingsViewMode = 'side-by-side';
     let activeFilters = {
         tools: new Set(),
         category: null,
     };
-    let activeCharts = {};
-    let toolColorMap = new Map();
-    let currentFindingsViewMode = 'side-by-side';
 
     // =================================================================
     // 2. ELEMENT SELECTORS
@@ -32,14 +32,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const kpiLinesAnalyzed = document.getElementById('kpi-lines-analyzed');
     const kpiAvgNovelty = document.getElementById('kpi-avg-novelty');
 
-
     // =================================================================
     // 3. CORE LOGIC & DATA HANDLING
     // =================================================================
 
-    /**
-     * Main function to fetch and render analysis for the selected PR.
-     */
     async function fetchAnalysis() {
         toggleLoading(true);
         showSkeletons(true);
@@ -56,15 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentAnalysisResults = await response.json();
 
-            // Reset filters to default state
             activeFilters.tools = new Set(currentAnalysisResults.metadata.tool_names);
             activeFilters.category = null;
 
-            // Render all components
-            renderAllUI(currentAnalysisResults, activeFilters);
-
-            // Asynchronously save results
-            saveAnalysis(currentAnalysisResults);
+            renderUI();
 
         } catch (error) {
             showError(`Failed to analyze PR: ${error.message}`);
@@ -75,57 +66,26 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    /**
-     * Fetches the initial list of pull requests for the dropdown.
-     */
     async function getPullRequests() {
         try {
             const response = await fetch('/api/get-pull-requests');
             if (!response.ok) throw new Error('Failed to fetch pull requests.');
             const prs = await response.json();
-
-            if (prs.length > 0) {
-                prSelect.innerHTML = prs.map(pr => `<option value="${pr.number}">#${pr.number}: ${pr.title}</option>`).join('');
-                fetchButton.disabled = false;
-            } else {
-                prSelect.innerHTML = `<option value="">No open PRs found</option>`;
-            }
+            prSelect.innerHTML = prs.length > 0
+                ? prs.map(pr => `<option value="${pr.number}">#${pr.number}: ${pr.title}</option>`).join('')
+                : `<option value="">No open PRs found</option>`;
+            fetchButton.disabled = prs.length === 0;
         } catch (error) {
             showError(error.message);
         }
     }
 
-    /**
-     * Saves analysis results to the backend.
-     */
-    async function saveAnalysis(results) {
-        try {
-            await fetch('/api/save-analysis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    pr_number: results.metadata.pr_number,
-                    tool_names: results.metadata.tool_names,
-                    summary_charts: results.summary_charts
-                })
-            });
-        } catch (error) {
-            console.error("Could not save analysis results:", error);
-        }
-    }
-
-    /**
-     * Exports the current findings data to a CSV file.
-     */
     function exportData() {
-        if (!currentAnalysisResults || !currentAnalysisResults.findings) {
+        if (!currentAnalysisResults?.findings) {
             showError("No data available to export.");
             return;
         }
-
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Location,Category,Tool,Is Novel,Comment\n";
-
+        let csvContent = "data:text/csv;charset=utf-8,Location,Category,Tool,Is Novel,Comment\n";
         currentAnalysisResults.findings.forEach(finding => {
             finding.reviews.forEach(review => {
                 const row = [
@@ -138,32 +98,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 csvContent += row + "\n";
             });
         });
-
-        const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
+        link.setAttribute("href", encodeURI(csvContent));
         link.setAttribute("download", `pr-${currentAnalysisResults.metadata.pr_number}-findings.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     }
 
-
     // =================================================================
     // 4. UI RENDERING & MANAGEMENT
     // =================================================================
 
-    /**
-     * Main rendering function, orchestrates all UI updates.
-     */
-    function renderAllUI(results, filters) {
+    function renderUI() {
+        if (!currentAnalysisResults) return;
         switchView('dashboard');
         switchTab('overview');
         dashboardControls.style.display = 'flex';
-        renderFilters(results.metadata.tool_names, filters.tools);
-        updateKPIs(results, filters);
-        renderFindings(results, filters);
-        renderCharts(results, filters);
+        renderFilters(currentAnalysisResults.metadata.tool_names, activeFilters.tools);
+        updateKPIs(currentAnalysisResults, activeFilters);
+        renderFindings(currentAnalysisResults, activeFilters);
+        renderCharts(currentAnalysisResults, activeFilters);
     }
 
     function toggleLoading(isLoading) {
@@ -179,13 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function switchView(viewName) {
         views.forEach(view => view.classList.remove('active'));
-        document.getElementById(`view-${viewName}`).classList.add('active');
+        document.getElementById(`view-${viewName}`)?.classList.add('active');
         navLinks.forEach(link => link.classList.toggle('active', link.getAttribute('data-view') === viewName));
     }
 
     function switchTab(tabName) {
         tabContents.forEach(content => content.classList.remove('active'));
-        document.getElementById(`tab-${tabName}`).classList.add('active');
+        document.getElementById(`tab-${tabName}`)?.classList.add('active');
         tabs.forEach(tab => tab.classList.toggle('active', tab.getAttribute('data-tab') === tabName));
     }
 
@@ -193,23 +148,17 @@ document.addEventListener('DOMContentLoaded', () => {
         toolFilterContainer.innerHTML = '<label>Filter by Tool:</label>';
         toolNames.forEach(tool => {
             const isChecked = activeTools.has(tool);
-            const checkboxHTML = `
+            toolFilterContainer.insertAdjacentHTML('beforeend', `
                 <label class="filter-checkbox">
                     <input type="checkbox" data-tool="${tool}" ${isChecked ? 'checked' : ''}>
                     <span>${tool}</span>
-                </label>
-            `;
-            toolFilterContainer.insertAdjacentHTML('beforeend', checkboxHTML);
+                </label>`);
         });
-
         toolFilterContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
             checkbox.addEventListener('change', () => {
-                const selectedTools = new Set();
-                toolFilterContainer.querySelectorAll('input:checked').forEach(cb => {
-                    selectedTools.add(cb.dataset.tool);
-                });
+                const selectedTools = new Set(Array.from(toolFilterContainer.querySelectorAll('input:checked')).map(cb => cb.dataset.tool));
                 activeFilters.tools = selectedTools;
-                renderAllUI(currentAnalysisResults, activeFilters);
+                renderUI();
             });
         });
     }
@@ -219,7 +168,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalFindings = filteredFindings.length;
         const novelScores = filteredFindings.filter(r => r.is_novel).length;
         const avgNovelty = totalFindings > 0 ? (novelScores / totalFindings) * 100 : 0;
-
         kpiTotalFindings.textContent = totalFindings;
         kpiLinesAnalyzed.textContent = results.metadata.lines_changed;
         kpiAvgNovelty.textContent = `${avgNovelty.toFixed(0)}%`;
@@ -228,22 +176,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderFindings(results, filters) {
         findingsContainer.innerHTML = '';
         const filteredFindings = results.findings
-            .map(finding => ({
-                ...finding,
-                reviews: finding.reviews.filter(review => filters.tools.has(review.tool))
-            }))
+            .map(finding => ({ ...finding, reviews: finding.reviews.filter(review => filters.tools.has(review.tool)) }))
             .filter(finding => finding.reviews.length > 0);
 
         if (filteredFindings.length === 0) {
             findingsContainer.innerHTML = '<p class="no-data-message">No findings match the current filters.</p>';
             return;
         }
-
         filteredFindings.forEach(finding => {
             const hasSuggestion = finding.reviews.some(r => r.suggested_code);
-            const card = (currentFindingsViewMode === 'unified' && hasSuggestion)
-                ? createUnifiedCard(finding)
-                : createSideBySideCard(finding);
+            const card = (currentFindingsViewMode === 'unified' && hasSuggestion) ? createUnifiedCard(finding) : createSideBySideCard(finding);
             findingsContainer.appendChild(card);
         });
     }
@@ -263,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
             reviewsHTML += `
                 <div class="tool-review">
-                    <h4 style="border-color: ${toolColor};"><span>${review.tool}</span>${noveltyBadge}</h4>
+                    <h4 style="border-color: ${toolColor};"><span>${escapeHtml(review.tool)}</span>${noveltyBadge}</h4>
                     <blockquote>${commentText}</blockquote>
                     ${diffHTML ? `<div class="diff-container">${diffHTML}</div>` : ''}
                 </div>`;
@@ -278,16 +220,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createUnifiedCard(finding) {
+        // This is a placeholder; you can copy your full implementation here if needed.
         const card = document.createElement('div');
         card.className = 'finding-card';
-        // This implementation can be copied from the previous fully working version if needed.
-        // For now, it will just show a placeholder.
         card.innerHTML = `<div class="finding-card-header"><h3>Unified View for <code>${escapeHtml(finding.location)}</code></h3></div>`;
         return card;
     }
 
     function escapeHtml(unsafe) {
-        return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        return unsafe ? unsafe.toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;") : '';
     }
 
     // =================================================================
@@ -297,8 +238,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderCharts(results, filters) {
         destroyAllCharts();
         assignToolColors(results.metadata.tool_names);
-
-        // Render all charts, with safety checks inside each function
         renderFindingsByToolChart(results, filters);
         renderFindingsByCategoryChart(results, filters);
         renderToolStrengthChart(results, filters);
@@ -312,21 +251,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function destroyAllCharts() {
-        Object.values(activeCharts).forEach(chart => chart.destroy());
+        Object.values(activeCharts).forEach(chart => chart?.destroy());
         activeCharts = {};
     }
 
     function assignToolColors(toolNames) {
         const DISTINCT_COLORS = ['#58A6FF', '#F778BA', '#3FB950', '#A371F7', '#F0B939', '#48D9A4'];
         toolColorMap.clear();
-        toolNames.forEach((toolName, index) => {
-            toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length]);
-        });
+        toolNames.forEach((toolName, index) => toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length]));
     }
 
     function showSkeletons(show) {
-        const wrappers = document.querySelectorAll('.chart-wrapper');
-        wrappers.forEach(wrapper => {
+        document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
             const canvas = wrapper.querySelector('canvas');
             let skeleton = wrapper.querySelector('.skeleton');
             if (show) {
@@ -338,103 +274,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 if (canvas) canvas.style.display = 'block';
-                if (skeleton) skeleton.remove();
+                skeleton?.remove();
             }
         });
     }
-
-    // Individual chart functions with safety checks
-    function renderFindingsByToolChart(results, filters) {
-        const ctx = document.getElementById('findingsByToolChart')?.getContext('2d');
-        if (!ctx || !results.summary_charts.findings_by_tool) return;
-
-        const filteredData = filterDataByTool(results.summary_charts.findings_by_tool, results.metadata.tool_names, filters.tools);
-        activeCharts.findingsByTool = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: filteredData.labels,
-                datasets: [{
-                    data: filteredData.data,
-                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)),
-                }]
-            },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } }
-        });
-    }
-
-    function renderFindingsByCategoryChart(results, filters) {
-        const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
-        if (!ctx || !results.summary_charts.findings_by_category) return;
-
-        const { labels, data } = results.summary_charts.findings_by_category;
-        activeCharts.findingsByCategory = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels, datasets: [{ data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }] },
-            options: {
-                plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } },
-                onClick: (evt, elements) => {
-                    if (elements.length > 0) {
-                        const clickedIndex = elements[0].index;
-                        const category = activeCharts.findingsByCategory.data.labels[clickedIndex];
-                        activeFilters.category = activeFilters.category === category ? null : category;
-                        renderToolStrengthChart(currentAnalysisResults, activeFilters);
-                    }
-                }
-            }
-        });
-    }
-
-    function renderToolStrengthChart(results, filters) {
-        const ctx = document.getElementById('toolStrengthChart')?.getContext('2d');
-        if (!ctx || !results.summary_charts.tool_strength_profile) return;
-
-        const { tool_names, categories, data } = results.summary_charts.tool_strength_profile;
-        const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
-        const filteredLabels = toolIndices.map(i => tool_names[i]);
-        const filteredData = toolIndices.map(i => data[i]);
-
-        let chartDataSets;
-        if (filters.category) {
-            const categoryIndex = categories.indexOf(filters.category);
-            chartDataSets = (categoryIndex > -1) ? [{
-                label: filters.category,
-                data: filteredData.map(toolData => toolData[categoryIndex]),
-                backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5],
-            }] : [];
-        } else {
-            chartDataSets = categories.map((cat, i) => ({
-                label: cat,
-                data: filteredData.map(toolData => toolData[i]),
-                backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5],
-            }));
-        }
-
-        const chartConfig = {
-            type: 'bar',
-            data: { labels: filteredLabels, datasets: chartDataSets },
-            options: {
-                scales: { x: { stacked: true }, y: { stacked: true } },
-                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
-            }
-        };
-
-        if (activeCharts.toolStrength) {
-            activeCharts.toolStrength.data = chartConfig.data;
-            activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text;
-            activeCharts.toolStrength.update();
-        } else {
-            activeCharts.toolStrength = new Chart(ctx, chartConfig);
-        }
-    }
-
-    // ... Implementations for other charts (novelty, density, etc.) following the same safe pattern
-    function renderFindingsByFileChart(r, f) { /* ... */ }
-    function renderNoveltyScoreChart(r, f) { /* ... */ }
-    function renderFindingsDensityChart(r, f) { /* ... */ }
-    function renderReviewSpeedChart(r, f) { /* ... */ }
-    function renderCommentVerbosityChart(r, f) { /* ... */ }
-    function renderSuggestionOverlapChart(r, f) { /* ... */ }
-    async function renderHistoryCharts() { /* ... */ }
 
     function filterDataByTool(dataArray, allLabels, activeLabelsSet) {
         const filtered = { labels: [], data: [] };
@@ -447,12 +290,207 @@ document.addEventListener('DOMContentLoaded', () => {
         return filtered;
     }
 
+    // --- Individual Chart Functions (with safety checks) ---
+
+    function renderFindingsByToolChart(results, filters) {
+        const ctx = document.getElementById('findingsByToolChart')?.getContext('2d');
+        const chartData = results.summary_charts.findings_by_tool;
+        if (!ctx || !chartData) return;
+
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.findingsByTool = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: filteredData.labels,
+                datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } }
+        });
+    }
+
+    function renderFindingsByCategoryChart(results, filters) {
+        const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
+        const chartData = results.summary_charts.findings_by_category;
+        if (!ctx || !chartData?.labels?.length) return;
+
+        activeCharts.findingsByCategory = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: chartData.labels,
+                datasets: [{ data: chartData.data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }]
+            },
+            options: {
+                plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } },
+                onClick: (_, elements) => {
+                    if (elements.length > 0) {
+                        const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
+                        activeFilters.category = activeFilters.category === category ? null : category;
+                        renderToolStrengthChart(currentAnalysisResults, activeFilters);
+                    }
+                }
+            }
+        });
+    }
+
+    function renderToolStrengthChart(results, filters) {
+        const ctx = document.getElementById('toolStrengthChart')?.getContext('2d');
+        const chartData = results.summary_charts.tool_strength_profile;
+        if (!ctx || !chartData) return;
+
+        const { tool_names, categories, data } = chartData;
+        const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
+        const filteredLabels = toolIndices.map(i => tool_names[i]);
+        const filteredData = toolIndices.map(i => data[i]);
+
+        const chartConfig = {
+            type: 'bar',
+            options: {
+                scales: { x: { stacked: true }, y: { stacked: true } },
+                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
+            }
+        };
+
+        if (filters.category) {
+            const categoryIndex = categories.indexOf(filters.category);
+            chartConfig.data = {
+                labels: filteredLabels,
+                datasets: (categoryIndex > -1) ? [{
+                    label: filters.category,
+                    data: filteredData.map(d => d[categoryIndex]),
+                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5],
+                }] : []
+            };
+        } else {
+            chartConfig.data = {
+                labels: filteredLabels,
+                datasets: categories.map((cat, i) => ({
+                    label: cat,
+                    data: filteredData.map(d => d[i]),
+                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5],
+                }))
+            };
+        }
+
+        if (activeCharts.toolStrength) {
+            activeCharts.toolStrength.data = chartConfig.data;
+            activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text;
+            activeCharts.toolStrength.update();
+        } else {
+            activeCharts.toolStrength = new Chart(ctx, chartConfig);
+        }
+    }
+
+    function renderFindingsByFileChart(results, filters) {
+        const ctx = document.getElementById('findingsByFileChart')?.getContext('2d');
+        const chartData = results.summary_charts.findings_by_file;
+        if (!ctx || !chartData?.labels?.length) return;
+        activeCharts.findingsByFile = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } }
+        });
+    }
+
+    function renderNoveltyScoreChart(results, filters) {
+        const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d');
+        const chartData = results.summary_charts.novelty_score;
+        if (!ctx || !chartData) return;
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.noveltyScore = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } }
+        });
+    }
+
+    function renderFindingsDensityChart(results, filters) {
+        const ctx = document.getElementById('findingsDensityChart')?.getContext('2d');
+        const chartData = results.summary_charts.findings_density;
+        if (!ctx || !chartData) return;
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.findingsDensity = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } }
+        });
+    }
+
+    function renderReviewSpeedChart(results, filters) {
+        const ctx = document.getElementById('reviewSpeedChart')?.getContext('2d');
+        const chartData = results.summary_charts.review_speed;
+        if (!ctx || !chartData?.labels?.length) return;
+        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
+        activeCharts.reviewSpeed = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } }
+        });
+    }
+
+    function renderCommentVerbosityChart(results, filters) {
+        const ctx = document.getElementById('commentVerbosityChart')?.getContext('2d');
+        const chartData = results.summary_charts.comment_verbosity;
+        if (!ctx || !chartData?.labels?.length) return;
+        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
+        activeCharts.commentVerbosity = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } }
+        });
+    }
+
+    function renderSuggestionOverlapChart(results, filters) {
+        const ctx = document.getElementById('suggestionOverlapChart')?.getContext('2d');
+        if (!ctx) return;
+        const overlaps = (results.summary_charts.suggestion_overlap || [])
+            .filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool)))
+            .sort((a, b) => b.size - a.size).slice(0, 10);
+        if (overlaps.length === 0) {
+            ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
+            ctx.fillText('No overlaps for selected tools.', ctx.canvas.width / 2, 50);
+            return;
+        }
+        activeCharts.suggestionOverlap = new Chart(ctx, {
+            type: 'bar',
+            data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } }
+        });
+    }
+
+    async function renderHistoryCharts() {
+        const findingsCtx = document.getElementById('historyFindingsChart')?.getContext('2d');
+        const noveltyCtx = document.getElementById('historyNoveltyChart')?.getContext('2d');
+        if (!findingsCtx || !noveltyCtx) return;
+        try {
+            const response = await fetch('/api/get-history');
+            if (!response.ok) return;
+            const historyData = await response.json();
+            if (historyData.length === 0) return;
+            const tools = [...new Set(historyData.map(d => d.tool_name))];
+            assignToolColors(tools);
+            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b));
+            const createDataset = (metric) => tools.map(tool => ({
+                label: tool,
+                data: labels.map(label => {
+                    const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool);
+                    return entry ? entry[metric] : null;
+                }),
+                borderColor: toolColorMap.get(tool),
+                backgroundColor: toolColorMap.get(tool),
+                tension: 0.2,
+                spanGaps: true
+            }));
+            activeCharts.historyFindings = new Chart(findingsCtx, { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } });
+            activeCharts.historyNovelty = new Chart(noveltyCtx, { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } });
+        } catch (error) { console.error("Could not render history charts:", error); }
+    }
+
     // =================================================================
-    // 6. INITIALIZATION & EVENT LISTENERS
+    // 6. INITIALIZATION
     // =================================================================
 
     function init() {
-        // Set global Chart.js defaults for readable legends
+        // Set global Chart.js defaults
         Chart.defaults.color = 'var(--color-text-primary)';
         Chart.defaults.borderColor = 'var(--color-border)';
         Chart.defaults.plugins.legend.position = 'bottom';
@@ -478,10 +516,9 @@ document.addEventListener('DOMContentLoaded', () => {
             renderFindings(currentAnalysisResults, activeFilters);
         });
 
-        // Initial data load
         getPullRequests();
         switchView('initial');
     }
 
-    init(); // Run the application
+    init();
 });
