@@ -12,7 +12,7 @@
     --color-accent: #58A6FF;
     --color-accent-hover: #79C0FF;
     --color-danger: #F85149;
-    --color-success: #3FB950;
+    --color-success: #238636;
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.2);
     --border-radius: 6px;
     --transition-speed: 0.2s ease;
@@ -28,7 +28,6 @@ body {
     overflow-x: hidden;
 }
 
-/* --- App Layout --- */
 .app-layout {
     display: flex;
     height: 100vh;
@@ -94,7 +93,6 @@ body {
     flex-grow: 1;
 }
 
-/* --- Header Controls --- */
 .controls-container {
     display: flex;
     align-items: center;
@@ -131,18 +129,108 @@ body {
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 .error-message { background-color: rgba(248, 81, 73, 0.1); color: var(--color-danger); border: 1px solid var(--color-danger); padding: 1rem; border-radius: var(--border-radius); margin-top: 1rem; }
 
-/* --- Views & Welcome Screen --- */
-.app-view { width: 100%; }
+.dashboard-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 1rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--color-border);
+}
+.filter-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.filter-container > label {
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+.filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--color-bg-light);
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    border: 1px solid var(--color-border);
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+}
+.filter-checkbox:hover {
+    border-color: var(--color-accent);
+}
+.filter-checkbox input {
+    cursor: pointer;
+    accent-color: var(--color-accent);
+}
+.export-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--color-success);
+    color: white;
+    border: 1px solid #2ea043;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color var(--transition-speed);
+}
+.export-button:hover {
+    background-color: #27963b;
+}
+
+.app-view { width: 100%; display: none; }
+.app-view.active { display: block; }
 .welcome-container { text-align: center; padding: 4rem 1rem; color: var(--color-text-secondary); }
 .welcome-container i { font-size: 4rem; color: var(--color-accent); margin-bottom: 1.5rem; }
 .welcome-container h1 { font-size: 2rem; color: var(--color-text-header); }
 
-/* --- Charts & Dashboard Grid --- */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.tabs {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 1.5rem;
+}
+.tab-link {
+    padding: 0.75rem 1.5rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 1rem;
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    margin-bottom: -1px; /* Overlap the main border */
+}
+.tab-link:hover {
+    color: var(--color-text-primary);
+}
+.tab-link.active {
+    color: var(--color-text-header);
+    border-bottom-color: var(--color-accent);
+}
+.tab-content {
+    display: none;
+}
+.tab-content.active {
+    display: block;
+}
 
 .charts-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-        gap: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
 }
 
 .single-col-grid { grid-template-columns: 1fr; }
@@ -152,19 +240,21 @@ body {
     border-radius: var(--border-radius);
     border: 1px solid var(--color-border);
     box-shadow: var(--shadow-md);
-    min-height: 350px;
+    min-height: 380px;
     display: flex;
     flex-direction: column;
 }
-
 .chart-container h3 {
     margin: 0 0 1.5rem 0;
-    font-size: 1.1rem;
+    font-size: 1rem;
     color: var(--color-text-header);
     border-bottom: 1px solid var(--color-border);
     padding-bottom: 0.75rem;
 }
-.chart-wrapper { position: relative; flex-grow: 1; }
+.chart-wrapper {
+    position: relative;
+    flex-grow: 1;
+}
 .kpi-card {
     min-height: auto;
     text-align: center;
@@ -182,7 +272,19 @@ body {
     color: var(--color-text-header);
 }
 
-/* --- Detailed Findings View --- */
+.skeleton {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--border-radius);
+    background: linear-gradient(90deg, var(--color-bg-light) 25%, #2c323a 50%, var(--color-bg-light) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite linear;
+}
+@keyframes skeleton-loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
 .findings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--color-border); padding-bottom: 1rem; }
 .findings-header h2 { margin: 0; font-size: 1.5rem; }
 .view-toggle { display: flex; align-items: center; gap: 0.25rem; background-color: var(--color-bg-dark); padding: 0.25rem; border-radius: var(--border-radius); border: 1px solid var(--color-border); }
@@ -191,7 +293,6 @@ body {
 .view-toggle button.active { background-color: var(--color-accent); color: var(--color-bg-dark); }
 .no-data-message { text-align: center; padding: 3rem; color: var(--color-text-secondary); }
 
-/* Card Styles */
 .finding-card { background-color: var(--color-bg-med); border: 1px solid var(--color-border); border-radius: var(--border-radius); margin-bottom: 1.5rem; box-shadow: var(--shadow-md); overflow: hidden; }
 .finding-card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; }
 .finding-card-header h3 { font-family: var(--font-mono); margin: 0; font-size: 1.1rem; }
@@ -199,34 +300,36 @@ body {
 .category.security { background-color: #DA3633; color: white; }
 .category.performance { background-color: #238636; color: white; }
 .category.bug { background-color: #D73A49; color: white; }
+/* FIX: Corrected the class name from .style-best-practice to .category.style-best-practice for proper targeting */
 .category.style-best-practice { background-color: #1F6FEB; color: white; }
+
 .finding-card-body {
     padding: 1.5rem;
-    display: flex; /* Lays out children (tool-review) in a row */
-    gap: 1.5rem; /* Creates space between the cards */
-    flex-wrap: wrap; /* Allows cards to wrap to the next line on small screens */
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
 }
 .tool-review {
     border: 1px solid var(--color-border);
-    flex: 1; /* Allows cards to grow and fill space */
-    min-width: 350px; /* Prevents cards from getting too narrow */
+    flex: 1;
+    min-width: 400px;
     border-radius: var(--border-radius);
     background-color: var(--color-bg-dark);
     display: flex;
     flex-direction: column;
 }
-.tool-review:first-child { border-top: none; }
+
 .tool-review h4 { margin: 0; padding: 0.75rem 1.5rem; background: var(--color-bg-light); border-bottom: 1px solid var(--color-border); border-left: 4px solid; display: flex; justify-content: space-between; align-items: center; font-size: 1rem; }
 .tool-review blockquote { margin: 0; padding: 1rem 1.5rem; white-space: pre-wrap; font-size: 0.95rem; flex-grow: 1; }
 .novelty-badge { font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 9999px; background-color: var(--color-accent); color: var(--color-bg-dark); }
 .diff-container { margin: 0 1.5rem 1.5rem; border-radius: var(--border-radius); overflow: hidden; border: 1px solid var(--color-border); }
 .d2h-file-header, .d2h-d-none { display: none; }
+/* FIX: Added !important to ensure these styles override any conflicting styles. */
 .d2h-code-line-ctn { font-family: var(--font-mono); font-size: 0.85rem; background-color: transparent !important; color: var(--color-text-secondary); }
 .d2h-code-side-linenumber { background-color: var(--color-bg-med) !important; }
 .d2h-code-line-ins { background-color: rgba(63, 185, 80, 0.15); }
 .d2h-code-line-del { background-color: rgba(248, 81, 73, 0.15); }
 
-/* Unified Diff View */
 .unified-diff-container { padding: 1rem 1.5rem; }
 .unified-diff-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 0.9rem; margin-top: 1rem; }
 .unified-diff-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--color-border); }

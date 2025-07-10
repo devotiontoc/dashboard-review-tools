@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Reviewer Analysis Dashboard</title>
+    <title>AI Reviewer Analysis Dashboard v3.0</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
@@ -31,7 +31,7 @@
             </a>
         </nav>
         <div class="sidebar-footer">
-            <p>Version 2.1</p>
+            <p>Version 3.0</p>
         </div>
     </aside>
 
@@ -40,9 +40,7 @@
             <div class="controls-container">
                 <div class="control-item">
                     <label for="pr-select"><i class="fa-solid fa-code-pull-request"></i> Select Pull Request</label>
-                    <select id="pr-select" name="pr-select">
-                        <option>Loading PRs...</option>
-                    </select>
+                    <select id="pr-select" name="pr-select"><option>Loading...</option></select>
                 </div>
                 <button id="fetch-button" disabled>
                     <i class="fas fa-sync-alt"></i>
@@ -50,68 +48,62 @@
                 </button>
                 <div id="loader" class="loader" style="display: none;"></div>
             </div>
+            <div id="dashboard-controls" class="dashboard-controls" style="display: none;">
+                <div id="tool-filter-container" class="filter-container">
+                    <label>Filter by Tool:</label>
+                </div>
+                <button id="export-csv-button" class="export-button">
+                    <i class="fas fa-file-csv"></i> Export Findings CSV
+                </button>
+            </div>
             <div id="error-display" class="error-message" style="display: none;"></div>
         </header>
 
         <main class="content-area">
-
             <section id="view-initial" class="app-view">
                 <div class="welcome-container">
                     <i class="fas fa-rocket"></i>
                     <h1>Welcome to the AI Reviewer Dashboard</h1>
-                    <p>Please select a Pull Request and click "Fetch Analysis" to begin.</p>
+                    <p>Select a Pull Request to begin.</p>
                 </div>
             </section>
 
             <section id="view-dashboard" class="app-view" style="display: none;">
-                <div class="charts-grid">
+                <div class="kpi-grid">
                     <div class="chart-container kpi-card">
-                        <h2>Total Findings</h2>
-                        <p id="kpi-total-findings">--</p>
-                    </div>
-                    <div class="chart-container kpi-card">
-                        <h2>Lines Analyzed</h2>
-                        <p id="kpi-lines-analyzed">--</p>
+                        <h2>Total Findings</h2><p id="kpi-total-findings">--</p>
                     </div>
                     <div class="chart-container kpi-card">
-                        <h2>Avg. Novelty</h2>
-                        <p id="kpi-avg-novelty">--%</p>
+                        <h2>Lines Analyzed</h2><p id="kpi-lines-analyzed">--</p>
                     </div>
-                    <div class="chart-container">
-                        <h3>Findings by Tool</h3>
-                        <div class="chart-wrapper"><canvas id="findingsByToolChart"></canvas></div>
+                    <div class="chart-container kpi-card">
+                        <h2>Avg. Novelty</h2><p id="kpi-avg-novelty">--%</p>
                     </div>
-                    <div class="chart-container">
-                        <h3>Findings by Category</h3>
-                        <div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div>
+                </div>
+                <nav class="tabs">
+                    <button class="tab-link active" data-tab="overview">Overview</button>
+                    <button class="tab-link" data-tab="performance">Performance & Quality</button>
+                    <button class="tab-link" data-tab="overlap">Overlap Analysis</button>
+                </nav>
+                <div id="tab-overview" class="tab-content active">
+                    <div class="charts-grid">
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="findingsByToolChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="toolStrengthChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="findingsByFileChart"></canvas></div></div>
                     </div>
-                    <div class="chart-container">
-                        <h3>Tool Strength Profile</h3>
-                        <div class="chart-wrapper"><canvas id="toolStrengthChart"></canvas></div>
+                </div>
+                <div id="tab-performance" class="tab-content">
+                    <div class="charts-grid">
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="noveltyScoreChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="findingsDensityChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="reviewSpeedChart"></canvas></div></div>
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="commentVerbosityChart"></canvas></div></div>
                     </div>
-                    <div class="chart-container">
-                        <h3>Novelty Score (%)</h3>
-                        <div class="chart-wrapper"><canvas id="noveltyScoreChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Findings Density (per 100 LoC)</h3>
-                        <div class="chart-wrapper"><canvas id="findingsDensityChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Review Speed (Avg. Seconds)</h3>
-                        <div class="chart-wrapper"><canvas id="reviewSpeedChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Comment Verbosity (Avg. Chars)</h3>
-                        <div class="chart-wrapper"><canvas id="commentVerbosityChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Findings per File</h3>
-                        <div class="chart-wrapper"><canvas id="findingsByFileChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Suggestion Overlaps</h3>
-                        <div class="chart-wrapper"><canvas id="suggestionOverlapChart"></canvas></div>
+                </div>
+                <div id="tab-overlap" class="tab-content">
+                    <div class="charts-grid">
+                        <div class="chart-container"><div class="chart-wrapper"><canvas id="suggestionOverlapChart"></canvas></div></div>
                     </div>
                 </div>
             </section>
@@ -119,14 +111,8 @@
             <section id="view-history" class="app-view" style="display: none;">
                 <h2>Historical Performance Trends</h2>
                 <div class="charts-grid single-col-grid">
-                    <div class="chart-container">
-                        <h3>Findings Over Time</h3>
-                        <div class="chart-wrapper"><canvas id="historyFindingsChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Novelty Score Over Time (%)</h3>
-                        <div class="chart-wrapper"><canvas id="historyNoveltyChart"></canvas></div>
-                    </div>
+                    <div class="chart-container"><div class="chart-wrapper"><canvas id="historyFindingsChart"></canvas></div></div>
+                    <div class="chart-container"><div class="chart-wrapper"><canvas id="historyNoveltyChart"></canvas></div></div>
                 </div>
             </section>
 
@@ -135,12 +121,11 @@
                     <h2>Consolidated Findings</h2>
                     <div class="view-toggle">
                         <label>View Mode:</label>
-                        <button id="view-side-by-side" class="active" title="Show each review in its own card">Cards</button>
-                        <button id="view-unified" title="Combine suggestions for the same code block">Unified</button>
+                        <button id="view-side-by-side" class="active">Cards</button>
+                        <button id="view-unified">Unified</button>
                     </div>
                 </div>
-                <div id="detailed-findings-container">
-                </div>
+                <div id="detailed-findings-container"></div>
             </section>
         </main>
     </div>
@@ -148,7 +133,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script>
-<script src="script.js"></script>
+<script type="module" src="js/main.js"></script>
 
 </body>
 </html>
