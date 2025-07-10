@@ -52,6 +52,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             currentAnalysisResults = await response.json();
 
+            // MASTER GUARD CLAUSE: Ensure the core data structure is present.
+            if (!currentAnalysisResults?.metadata || !currentAnalysisResults?.summary_charts || !currentAnalysisResults?.findings) {
+                throw new Error("Received incomplete or malformed analysis data from the API.");
+            }
+
             activeFilters.tools = new Set(currentAnalysisResults.metadata.tool_names);
             activeFilters.category = null;
 
@@ -122,14 +127,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function toggleLoading(isLoading) {
-        loader.style.display = isLoading ? 'block' : 'none';
-        fetchButton.disabled = isLoading;
+        if (loader) loader.style.display = isLoading ? 'block' : 'none';
+        if (fetchButton) fetchButton.disabled = isLoading;
         if (isLoading) showError('');
     }
 
     function showError(message) {
-        errorDisplay.textContent = message;
-        errorDisplay.style.display = message ? 'block' : 'none';
+        if (errorDisplay) {
+            errorDisplay.textContent = message;
+            errorDisplay.style.display = message ? 'block' : 'none';
+        }
     }
 
     function switchView(viewName) {
@@ -145,6 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderFilters(toolNames, activeTools) {
+        if (!toolFilterContainer) return;
         toolFilterContainer.innerHTML = '<label>Filter by Tool:</label>';
         toolNames.forEach(tool => {
             const isChecked = activeTools.has(tool);
@@ -164,19 +172,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateKPIs(results, filters) {
+        if (!results.findings) return;
         const filteredFindings = results.findings.flatMap(f => f.reviews).filter(r => filters.tools.has(r.tool));
         const totalFindings = filteredFindings.length;
         const novelScores = filteredFindings.filter(r => r.is_novel).length;
         const avgNovelty = totalFindings > 0 ? (novelScores / totalFindings) * 100 : 0;
-        kpiTotalFindings.textContent = totalFindings;
-        kpiLinesAnalyzed.textContent = results.metadata.lines_changed;
-        kpiAvgNovelty.textContent = `${avgNovelty.toFixed(0)}%`;
+        if (kpiTotalFindings) kpiTotalFindings.textContent = totalFindings;
+        if (kpiLinesAnalyzed) kpiLinesAnalyzed.textContent = results.metadata.lines_changed;
+        if (kpiAvgNovelty) kpiAvgNovelty.textContent = `${avgNovelty.toFixed(0)}%`;
     }
 
     function renderFindings(results, filters) {
+        if (!findingsContainer) return;
         findingsContainer.innerHTML = '';
         const filteredFindings = results.findings
-            .map(finding => ({ ...finding, reviews: finding.reviews.filter(review => filters.tools.has(review.tool)) }))
+            .map(finding => ({...finding, reviews: finding.reviews.filter(review => filters.tools.has(review.tool))}))
             .filter(finding => finding.reviews.length > 0);
 
         if (filteredFindings.length === 0) {
@@ -200,7 +210,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let diffHTML = '';
             if (review.original_code && review.suggested_code) {
                 const diffString = `--- a\n+++ b\n${review.original_code.split('\n').map(l => `-${l}`).join('\n')}\n${review.suggested_code.split('\n').map(l => `+${l}`).join('\n')}`;
-                diffHTML = Diff2Html.html(diffString, { drawFileList: false, matching: 'lines', outputFormat: 'side-by-side' });
+                diffHTML = Diff2Html.html(diffString, {
+                    drawFileList: false,
+                    matching: 'lines',
+                    outputFormat: 'side-by-side'
+                });
             }
             const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
             reviewsHTML += `
@@ -220,10 +234,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createUnifiedCard(finding) {
-        // This is a placeholder; you can copy your full implementation here if needed.
         const card = document.createElement('div');
         card.className = 'finding-card';
-        card.innerHTML = `<div class="finding-card-header"><h3>Unified View for <code>${escapeHtml(finding.location)}</code></h3></div>`;
+        const reviewsWithSuggestions = finding.reviews.filter(r => r.suggested_code);
+        const reviewsWithoutSuggestions = finding.reviews.filter(r => !r.suggested_code);
+        const originalCode = reviewsWithSuggestions[0]?.original_code || '';
+
+        let unifiedDiffHTML = `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
+        originalCode.split('\n').forEach(line => {
+            unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+        });
+        reviewsWithSuggestions.forEach(review => {
+            const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+            review.suggested_code.split('\n').forEach((line, i) => {
+                const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
+                unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+            });
+        });
+        unifiedDiffHTML += `</tbody></table></div>`;
+
+        let otherCommentsHTML = '';
+        if (reviewsWithoutSuggestions.length > 0) {
+            otherCommentsHTML = '<div class="other-comments-container"><h5>Additional Comments</h5>';
+            reviewsWithoutSuggestions.forEach(review => {
+                const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+                const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
+                otherCommentsHTML += `
+                    <div class="tool-review-small" style="border-color: ${toolColor};">
+                        <h4><span>${escapeHtml(review.tool)}</span>${noveltyBadge}</h4>
+                        <blockquote>${escapeHtml(review.comment)}</blockquote>
+                    </div>`;
+            });
+            otherCommentsHTML += '</div>';
+        }
+
+        card.innerHTML = `
+            <div class="finding-card-header">
+                <h3><code>${escapeHtml(finding.location)}</code></h3>
+                <span class="category ${escapeHtml(finding.category.toLowerCase().replace(/ /g, '-'))}">${escapeHtml(finding.category)}</span>
+            </div>
+            <div class="finding-card-body unified">${unifiedDiffHTML}${otherCommentsHTML}</div>`;
         return card;
     }
 
@@ -280,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function filterDataByTool(dataArray, allLabels, activeLabelsSet) {
-        const filtered = { labels: [], data: [] };
+        const filtered = {labels: [], data: []};
         allLabels.forEach((label, i) => {
             if (activeLabelsSet.has(label)) {
                 filtered.labels.push(label);
@@ -302,9 +352,15 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'bar',
             data: {
                 labels: filteredData.labels,
-                datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }]
+                datasets: [{
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool))
+                }]
             },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } }
+            options: {
+                indexAxis: 'y',
+                plugins: {legend: {display: false}, title: {display: true, text: 'Findings by Tool'}}
+            }
         });
     }
 
@@ -317,10 +373,16 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'doughnut',
             data: {
                 labels: chartData.labels,
-                datasets: [{ data: chartData.data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }]
+                datasets: [{
+                    data: chartData.data,
+                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939']
+                }]
             },
             options: {
-                plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } },
+                plugins: {
+                    title: {display: true, text: 'Findings by Category (Click to Filter)'},
+                    legend: {position: 'right'}
+                },
                 onClick: (_, elements) => {
                     if (elements.length > 0) {
                         const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
@@ -337,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const chartData = results.summary_charts.tool_strength_profile;
         if (!ctx || !chartData) return;
 
-        const { tool_names, categories, data } = chartData;
+        const {tool_names, categories, data} = chartData;
         const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
         const filteredLabels = toolIndices.map(i => tool_names[i]);
         const filteredData = toolIndices.map(i => data[i]);
@@ -345,8 +407,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const chartConfig = {
             type: 'bar',
             options: {
-                scales: { x: { stacked: true }, y: { stacked: true } },
-                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
+                scales: {x: {stacked: true}, y: {stacked: true}},
+                plugins: {
+                    legend: {display: true},
+                    title: {
+                        display: true,
+                        text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}`
+                    }
+                }
             }
         };
 
@@ -386,8 +454,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!ctx || !chartData?.labels?.length) return;
         activeCharts.findingsByFile = new Chart(ctx, {
             type: 'bar',
-            data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } }
+            data: {labels: chartData.labels, datasets: [{data: chartData.data, backgroundColor: '#A371F7'}]},
+            options: {
+                indexAxis: 'y',
+                plugins: {legend: {display: false}, title: {display: true, text: 'Findings per File'}}
+            }
         });
     }
 
@@ -398,8 +469,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
         activeCharts.noveltyScore = new Chart(ctx, {
             type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } }
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool))
+                }]
+            },
+            options: {plugins: {legend: {display: false}, title: {display: true, text: 'Novelty Score (%)'}}}
         });
     }
 
@@ -410,8 +487,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
         activeCharts.findingsDensity = new Chart(ctx, {
             type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } }
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool))
+                }]
+            },
+            options: {plugins: {legend: {display: false}, title: {display: true, text: 'Findings per 100 LoC'}}}
         });
     }
 
@@ -422,8 +505,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
         activeCharts.reviewSpeed = new Chart(ctx, {
             type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } }
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool))
+                }]
+            },
+            options: {plugins: {legend: {display: false}, title: {display: true, text: 'Review Speed (Avg. Seconds)'}}}
         });
     }
 
@@ -434,8 +523,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
         activeCharts.commentVerbosity = new Chart(ctx, {
             type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } }
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool))
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {display: false},
+                    title: {display: true, text: 'Comment Verbosity (Avg. Chars)'}
+                }
+            }
         });
     }
 
@@ -446,14 +546,30 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool)))
             .sort((a, b) => b.size - a.size).slice(0, 10);
         if (overlaps.length === 0) {
-            ctx.clearRect(0,0,ctx.canvas.width, ctx.canvas.height);
-            ctx.fillText('No overlaps for selected tools.', ctx.canvas.width / 2, 50);
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            const wrapper = ctx.canvas.parentElement;
+            if (wrapper) {
+                const noDataMessage = document.createElement('p');
+                noDataMessage.className = 'no-data-message';
+                noDataMessage.textContent = 'No overlaps for selected tools.';
+                if (wrapper.querySelector('.no-data-message')) wrapper.querySelector('.no-data-message').remove();
+                wrapper.appendChild(noDataMessage);
+            }
             return;
         }
+        const wrapper = ctx.canvas.parentElement;
+        if (wrapper && wrapper.querySelector('.no-data-message')) wrapper.querySelector('.no-data-message').remove();
+
         activeCharts.suggestionOverlap = new Chart(ctx, {
             type: 'bar',
-            data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } }
+            data: {
+                labels: overlaps.map(d => d.sets.join(' & ')),
+                datasets: [{data: overlaps.map(d => d.size), backgroundColor: '#F87171'}]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: {legend: {display: false}, title: {display: true, text: 'Suggestion Overlaps'}}
+            }
         });
     }
 
@@ -468,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (historyData.length === 0) return;
             const tools = [...new Set(historyData.map(d => d.tool_name))];
             assignToolColors(tools);
-            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b));
+            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a, b) => new Date(a) - new Date(b));
             const createDataset = (metric) => tools.map(tool => ({
                 label: tool,
                 data: labels.map(label => {
@@ -480,9 +596,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 tension: 0.2,
                 spanGaps: true
             }));
-            activeCharts.historyFindings = new Chart(findingsCtx, { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } });
-            activeCharts.historyNovelty = new Chart(noveltyCtx, { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } });
-        } catch (error) { console.error("Could not render history charts:", error); }
+            if (activeCharts.historyFindings) activeCharts.historyFindings.destroy();
+            activeCharts.historyFindings = new Chart(findingsCtx, {
+                type: 'line',
+                data: {labels, datasets: createDataset('finding_count')},
+                options: {plugins: {title: {display: true, text: 'Findings Over Time'}, legend: {display: true}}}
+            });
+            if (activeCharts.historyNovelty) activeCharts.historyNovelty.destroy();
+            activeCharts.historyNovelty = new Chart(noveltyCtx, {
+                type: 'line',
+                data: {labels, datasets: createDataset('novelty_score')},
+                options: {
+                    plugins: {
+                        title: {display: true, text: 'Novelty Score Over Time (%)'},
+                        legend: {display: true}
+                    }
+                }
+            });
+        } catch (error) {
+            console.error("Could not render history charts:", error);
+        }
     }
 
     // =================================================================
@@ -509,16 +642,15 @@ document.addEventListener('DOMContentLoaded', () => {
         tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab'))));
         viewSideBySideBtn.addEventListener('click', () => {
             currentFindingsViewMode = 'side-by-side';
-            renderFindings(currentAnalysisResults, activeFilters);
+            if (currentAnalysisResults) renderFindings(currentAnalysisResults, activeFilters);
         });
         viewUnifiedBtn.addEventListener('click', () => {
             currentFindingsViewMode = 'unified';
-            renderFindings(currentAnalysisResults, activeFilters);
+            if (currentAnalysisResults) renderFindings(currentAnalysisResults, activeFilters);
         });
 
         getPullRequests();
         switchView('initial');
     }
-
+    });
     init();
-});
