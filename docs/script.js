@@ -14,23 +14,37 @@ document.addEventListener('DOMContentLoaded', function() {
     let activeCharts = [];
     let currentViewMode = 'side-by-side';
     let currentAnalysisResults = null;
+    let toolColorMap = new Map();
 
     // --- High-Contrast Color Palette ---
     const DISTINCT_COLORS = [
         '#5A87C5', '#E67E22', '#2ECC71', '#9B59B6', '#F1C40F',
-        '#1ABC9C', '#E74C3C', '#3498DB', '#7F8C8D', '#D35400'
+        '#1ABC9C', '#E74C3C', '#3498DB', '#7F8C8D', '#D35400',
+        '#27AE60', '#C0392B', '#8E44AD', '#2980B9'
     ];
 
-    /**
-     * Generates a consistent color from a predefined palette based on the input string.
-     */
-    function getToolColor(str) {
-        let hash = 0;
-        for (let i = 0; i < str.length; i++) {
-            hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        const index = Math.abs(hash % DISTINCT_COLORS.length);
-        return DISTINCT_COLORS[index];
+    function assignToolColors(toolNames) {
+        toolColorMap.clear();
+        const assignedColors = new Set();
+        let colorIndex = 0;
+
+        toolNames.forEach(toolName => {
+            let hash = 0;
+            for (let i = 0; i < toolName.length; i++) {
+                hash = toolName.charCodeAt(i) + ((hash << 5) - hash);
+            }
+            let preferredIndex = Math.abs(hash % DISTINCT_COLORS.length);
+            let chosenColor = DISTINCT_COLORS[preferredIndex];
+
+            // If the preferred color is already taken, find the next available one.
+            while (assignedColors.has(chosenColor) && assignedColors.size < DISTINCT_COLORS.length) {
+                preferredIndex = (preferredIndex + 1) % DISTINCT_COLORS.length;
+                chosenColor = DISTINCT_COLORS[preferredIndex];
+            }
+
+            toolColorMap.set(toolName, chosenColor);
+            assignedColors.add(chosenColor);
+        });
     }
 
     /**
@@ -137,7 +151,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return {
                     label: tool,
                     data: labels.map(label => toolData.find(d => new Date(d.timestamp).toLocaleDateString() === label)?.finding_count || null),
-                    borderColor: getToolColor(tool),
+                    borderColor: toolColorMap.get(tool) || '#7F8C8D',
                     tension: 0.1,
                     spanGaps: true
                 };
@@ -148,7 +162,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return {
                     label: tool,
                     data: labels.map(label => toolData.find(d => new Date(d.timestamp).toLocaleDateString() === label)?.novelty_score || null),
-                    borderColor: getToolColor(tool),
+                    borderColor: toolColorMap.get(tool) || '#7F8C8D',
                     tension: 0.1,
                     spanGaps: true
                 };
@@ -186,14 +200,15 @@ document.addEventListener('DOMContentLoaded', function() {
             novelty_score, findings_density, tool_strength_profile
         } = results.summary_charts;
 
-        const dynamicColors = tool_names.map(name => getToolColor(name));
+        assignToolColors(tool_names);
+        const dynamicColors = tool_names.map(name => toolColorMap.get(name));
         const commonChartOptions = (indexAxis = 'x') => ({ indexAxis, responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#9CA3AF' }, grid: { color: 'rgba(55, 65, 81, 0.5)' } }, y: { ticks: { color: '#9CA3AF' }, grid: { color: 'rgba(55, 65, 81, 0.5)' } } } });
 
         activeCharts.push(new Chart(document.getElementById('findingsByToolChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Number of Findings', data: findings_by_tool, backgroundColor: dynamicColors }] }, options: commonChartOptions('y') }));
         activeCharts.push(new Chart(document.getElementById('findingsByCategoryChart'), { type: 'doughnut', data: { labels: findings_by_category.labels, datasets: [{ data: findings_by_category.data, backgroundColor: ['#991B1B', '#166534', '#9A3412', '#1E40AF'] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { color: '#D1D5DB' } } } } }));
         activeCharts.push(new Chart(document.getElementById('findingsByFileChart'), { type: 'bar', data: { labels: findings_by_file.labels, datasets: [{ label: 'Number of Findings', data: findings_by_file.data, backgroundColor: '#A78BFA' }] }, options: commonChartOptions('y') }));
-        activeCharts.push(new Chart(document.getElementById('commentVerbosityChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Average Characters per Comment', data: comment_verbosity, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
-        activeCharts.push(new Chart(document.getElementById('reviewSpeedChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Avg Time to Comment (s)', data: review_speed, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+        activeCharts.push(new Chart(document.getElementById('commentVerbosityChart'), { type: 'bar', data: { labels: comment_verbosity.labels, datasets: [{ label: 'Average Characters per Comment', data: comment_verbosity.data, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+        activeCharts.push(new Chart(document.getElementById('reviewSpeedChart'), { type: 'bar', data: { labels: review_speed.labels, datasets: [{ label: 'Avg Time to Comment (s)', data: review_speed.data, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
         const topOverlaps = suggestion_overlap.filter(item => item.sets.length > 1).sort((a, b) => b.size - a.size).slice(0, 3);
         if (topOverlaps.length > 0) { activeCharts.push(new Chart(document.getElementById('suggestionOverlapChart'), { type: 'bar', data: { labels: topOverlaps.map(d => d.sets.join(' & ')), datasets: [{ label: 'Overlapping Findings', data: topOverlaps.map(d => d.size), backgroundColor: '#F87171' }] }, options: commonChartOptions('y') })); }
         activeCharts.push(new Chart(document.getElementById('noveltyScoreChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Novelty Score (%)', data: novelty_score, backgroundColor: dynamicColors }] }, options: { ...commonChartOptions(), plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.raw}% Unique` } } } } }));
@@ -228,7 +243,7 @@ document.addEventListener('DOMContentLoaded', function() {
         card.className = 'finding-card';
         let reviewsHTML = '';
         finding.reviews.forEach(review => {
-            const toolColor = getToolColor(review.tool);
+            const toolColor = toolColorMap.get(review.tool) || '#7F8C8D';
             const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
             let diffHTML = '';
             if (review.original_code && review.suggested_code) {
@@ -254,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 diffTable += `<tr><td class="line-num">-</td><td colspan="2"><code>${escapeHtml(line)}</code></td></tr>`;
             });
             reviewsWithSuggestions.forEach(review => {
-                const toolColor = getToolColor(review.tool);
+                const toolColor = toolColorMap.get(review.tool) || '#7F8C8D';
                 review.suggested_code.split('\n').forEach((line, i) => {
                     const toolName = i === 0 ? `<span style="color:${toolColor}; font-weight:bold;">${review.tool}</span>` : '';
                     diffTable += `<tr><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td><code>${escapeHtml(line)}</code></td></tr>`;
@@ -268,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if(reviewsWithoutSuggestions.length > 0) {
             otherCommentsHTML = '<div class="other-comments-container">';
             reviewsWithoutSuggestions.forEach(review => {
-                const toolColor = getToolColor(review.tool);
+                const toolColor = toolColorMap.get(review.tool) || '#7F8C8D';
                 const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
                 otherCommentsHTML += `<div class="tool-review-small"><h4 style="border-color: ${toolColor};"><span>${review.tool}</span>${noveltyBadge}</h4><blockquote>${escapeHtml(review.comment)}</blockquote></div>`;
             });
