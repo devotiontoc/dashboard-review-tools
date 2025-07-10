@@ -234,3 +234,26 @@ h2 {
 .d2h-code-side-line-ins { background-color: rgba(22, 163, 74, 0.1); }
 .d2h-code-line-del { background-color: rgba(220, 38, 38, 0.15); }
 .d2h-code-side-line-del { background-color: rgba(220, 38, 38, 0.1); }
+
+.novelty-badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 9999px;
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+    margin-left: 0.75rem;
+    vertical-align: middle;
+}
+
+/* Also, make the h4 a flex container to align the badge nicely */
+.tool-review h4 {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--color-border);
+    border-left: 4px solid;
+    /* ✅ NEW flex properties */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}

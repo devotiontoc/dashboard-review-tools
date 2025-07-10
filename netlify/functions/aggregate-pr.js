@@ -1,8 +1,10 @@
 const { Octokit } = require("@octokit/rest");
+const stringSimilarity = require("string-similarity");
 
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
+const SIMILARITY_THRESHOLD = 0.7; // 70% similarity threshold
 
 // --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
@@ -40,16 +42,18 @@ exports.handler = async function(event, context) {
     try {
         const discoveredTools = new Set();
 
-        const [prData, reviewComments, issueComments, reviews] = await Promise.all([
+        const [prResponse, reviewComments, issueComments, reviews] = await Promise.all([
             octokit.pulls.get({ owner, repo, pull_number: prNumber }),
             octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber }),
             octokit.paginate(octokit.issues.listComments, { owner, repo, issue_number: prNumber }),
             octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber })
         ]);
 
-        const prCreatedAt = parseIsoTimestamp(prData.data.created_at);
-        const allItems = new Map();
+        const prData = prResponse.data;
+        const prCreatedAt = parseIsoTimestamp(prData.created_at);
+        const linesChanged = prData.additions + prData.deletions;
 
+        const allItems = new Map();
         [...reviewComments, ...issueComments].forEach(item => allItems.set(item.id, item));
 
         const reviewCommentPromises = reviews.map(review => {
@@ -60,7 +64,6 @@ exports.handler = async function(event, context) {
         });
 
         const commentsFromReviews = await Promise.all(reviewCommentPromises);
-
         commentsFromReviews.flat().forEach(comment => allItems.set(comment.id, comment));
 
         console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
@@ -70,10 +73,7 @@ exports.handler = async function(event, context) {
         const commentLengths = {};
         const reviewTimes = {};
 
-        // --- ✅ NEW TWO-PASS GROUPING LOGIC ---
-
-        // PASS 1: Identify all unique multi-line comment ranges.
-        const fileRanges = {}; // E.g., { 'path/to/file.js': [{ start: 9, end: 13 }, ...] }
+        const fileRanges = {};
         allCommentsList.forEach(item => {
             if (item.path && item.start_line && item.line !== item.start_line) {
                 if (!fileRanges[item.path]) {
@@ -83,7 +83,6 @@ exports.handler = async function(event, context) {
             }
         });
 
-        // PASS 2: Group all comments, checking against the ranges found in Pass 1.
         for (const item of allCommentsList) {
             const author = item.user?.login;
             if (!author) continue;
@@ -94,23 +93,19 @@ exports.handler = async function(event, context) {
             const commentBody = item.body || '';
             if (!commentBody) continue;
 
-            // --- Grouping Key Logic ---
             let findingKey = "General PR Summary";
             if (item.path && (item.line || item.start_line)) {
                 let representativeLine = item.start_line || item.line;
                 const rangesInFile = fileRanges[item.path] || [];
 
-                // Check if this comment's line falls within an established multi-line range.
                 for (const range of rangesInFile) {
-                    // Use item.line as it represents the comment's actual position.
                     if (item.line >= range.start && item.line <= range.end) {
-                        representativeLine = range.start; // Group by the start of the range.
+                        representativeLine = range.start;
                         break;
                     }
                 }
                 findingKey = `${item.path}:${representativeLine}`;
             }
-            // --- End Grouping Key Logic ---
 
             const timestampStr = item.submitted_at || item.created_at;
             const commentCreatedAt = parseIsoTimestamp(timestampStr);
@@ -144,7 +139,39 @@ exports.handler = async function(event, context) {
             commentLengths[currentTool].push(commentBody.length);
         }
 
-        // --- The rest of the script for processing and output remains the same ---
+        const novelFindingCount = {};
+        for (const location in findingsMap) {
+            const reviewsList = findingsMap[location];
+            if (reviewsList.length <= 1) {
+                if(reviewsList.length === 1) {
+                    reviewsList[0].is_novel = true;
+                }
+                continue;
+            }
+
+            reviewsList.forEach(r => r.is_novel = false);
+
+            for (let i = 0; i < reviewsList.length; i++) {
+                let isNovel = true;
+                for (let j = 0; j < reviewsList.length; j++) {
+                    if (i === j) continue;
+
+                    const similarity = stringSimilarity.compareTwoStrings(
+                        reviewsList[i].comment,
+                        reviewsList[j].comment
+                    );
+
+                    if (similarity >= SIMILARITY_THRESHOLD) {
+                        isNovel = false;
+                        break;
+                    }
+                }
+                if (isNovel) {
+                    reviewsList[i].is_novel = true;
+                }
+            }
+        }
+
         const processedFindings = [];
         const categoryCounts = {};
         const toolFindingCounts = {};
@@ -175,6 +202,9 @@ exports.handler = async function(event, context) {
 
             reviewsList.forEach(review => {
                 toolFindingCounts[review.tool] = (toolFindingCounts[review.tool] || 0) + 1;
+                if (review.is_novel) {
+                    novelFindingCount[review.tool] = (novelFindingCount[review.tool] || 0) + 1;
+                }
             });
 
             processedFindings.push({ location, category, reviews: reviewsList });
@@ -196,7 +226,8 @@ exports.handler = async function(event, context) {
             metadata: {
                 repo: TARGET_GITHUB_REPO,
                 pr_number: parseInt(prNumber),
-                tool_names: finalToolList
+                tool_names: finalToolList,
+                lines_changed: linesChanged
             },
             summary_charts: {
                 findings_by_tool: finalToolList.map(tool => toolFindingCounts[tool] || 0),
@@ -204,7 +235,16 @@ exports.handler = async function(event, context) {
                 comment_verbosity: { labels: finalToolList, data: finalToolList.map(tool => getAvg(commentLengths, tool)) },
                 findings_by_file: { labels: Object.keys(findingsPerFile), data: Object.values(findingsPerFile) },
                 review_speed: { labels: finalToolList, data: finalToolList.map(tool => getAvg(reviewTimes, tool)) },
-                suggestion_overlap: overlapDataForJson
+                suggestion_overlap: overlapDataForJson,
+                novelty_score: finalToolList.map(tool => {
+                    const total = toolFindingCounts[tool] || 0;
+                    const novel = novelFindingCount[tool] || 0;
+                    return total > 0 ? Math.round((novel / total) * 100) : 0;
+                }),
+                findings_density: finalToolList.map(tool => {
+                    const total = toolFindingCounts[tool] || 0;
+                    return linesChanged > 0 ? (total / linesChanged) * 100 : 0;
+                })
             },
             findings: processedFindings
         };

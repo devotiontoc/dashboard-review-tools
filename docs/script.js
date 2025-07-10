@@ -7,7 +7,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     let activeCharts = [];
 
-    // 1. Fetch open pull requests on page load
+    /**
+     * Generates a consistent, visually pleasant HSL color from any string.
+     * @param {string} str The input string (e.g., a tool name).
+     * @param {number} s Saturation percentage.
+     * @param {number} l Lightness percentage.
+     * @returns {string} The HSL color string.
+     */
+    function stringToHslColor(str, s = 70, l = 50) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const h = hash % 360;
+        return `hsl(${h}, ${s}%, ${l}%)`;
+    }
+
+    /**
+     * Fetches the list of open pull requests to populate the dropdown.
+     */
     async function getPullRequests() {
         try {
             const response = await fetch('/api/get-pull-requests');
@@ -28,25 +46,22 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         } catch (error) {
             console.error("Error fetching pull requests:", error);
-            prSelect.innerHTML = `<option value="">Error loading PRs</option>`;
-            fetchButton.disabled = true;
-            showError(`Could not load Pull Requests from repository. ${error.message}`);
+            showError(`Could not load Pull Requests. ${error.message}`);
         }
     }
 
-    // 2. Add event listener to the fetch button
+    /**
+     * Main event handler for fetching and displaying analysis for a selected PR.
+     */
     fetchButton.addEventListener('click', async () => {
         const prNumber = prSelect.value;
-        if (!prNumber) {
-            alert("Please select a Pull Request.");
-            return;
-        }
+        if (!prNumber) return;
 
-        // --- UI Reset ---
         loader.style.display = 'block';
         fetchButton.disabled = true;
         dashboardContent.style.display = 'none';
         errorDisplay.style.display = 'none';
+
         activeCharts.forEach(chart => chart.destroy());
         activeCharts = [];
 
@@ -57,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(errorData.error || `Aggregation failed with status: ${response.status}`);
             }
             const results = await response.json();
-            console.log("RESULTS FROM API:", results);
+
             renderCharts(results);
             renderFindings(results);
             dashboardContent.style.display = 'block';
@@ -71,25 +86,30 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
+    /**
+     * Displays an error message in the main content area.
+     * @param {string} message The error message to display.
+     */
     function showError(message) {
         dashboardContent.style.display = 'none';
         errorDisplay.textContent = message;
         errorDisplay.style.display = 'block';
     }
 
-    // --- Initial Load ---
-    getPullRequests();
-
-
-    // --- All of your original rendering functions go below ---
-
+    /**
+     * Renders all the charts on the dashboard.
+     * @param {object} results The analysis results from the API.
+     */
     function renderCharts(results) {
         const { tool_names } = results.metadata;
         const {
             findings_by_tool, findings_by_category, comment_verbosity,
-            findings_by_file, review_speed, suggestion_overlap
+            findings_by_file, review_speed, suggestion_overlap,
+            novelty_score, findings_density
         } = results.summary_charts;
-        const COLORS = ['#38BDF8', '#F472B6', '#A78BFA', '#34D399', '#FBBF24', '#F87171'];
+
+        const dynamicColors = tool_names.map(name => stringToHslColor(name));
+
         const commonChartOptions = (indexAxis = 'x') => ({
             indexAxis,
             responsive: true,
@@ -103,27 +123,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
         activeCharts.push(new Chart(document.getElementById('findingsByToolChart'), {
             type: 'bar',
-            data: { labels: tool_names, datasets: [{ label: 'Number of Findings', data: findings_by_tool, backgroundColor: COLORS }] },
+            data: { labels: tool_names, datasets: [{ label: 'Number of Findings', data: findings_by_tool, backgroundColor: dynamicColors }] },
             options: commonChartOptions('y')
         }));
+
         activeCharts.push(new Chart(document.getElementById('findingsByCategoryChart'), {
             type: 'doughnut',
             data: { labels: findings_by_category.labels, datasets: [{ data: findings_by_category.data, backgroundColor: ['#991B1B', '#166534', '#9A3412', '#1E40AF'] }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { color: '#D1D5DB' } } } }
         }));
+
         activeCharts.push(new Chart(document.getElementById('findingsByFileChart'), {
             type: 'bar',
             data: { labels: findings_by_file.labels, datasets: [{ label: 'Number of Findings', data: findings_by_file.data, backgroundColor: '#A78BFA' }] },
             options: commonChartOptions('y')
         }));
+
         activeCharts.push(new Chart(document.getElementById('commentVerbosityChart'), {
             type: 'bar',
-            data: { labels: comment_verbosity.labels, datasets: [{ label: 'Average Characters per Comment', data: comment_verbosity.data, backgroundColor: '#34D399' }] },
+            data: { labels: tool_names, datasets: [{ label: 'Average Characters per Comment', data: comment_verbosity, backgroundColor: dynamicColors }] },
             options: commonChartOptions()
         }));
+
         activeCharts.push(new Chart(document.getElementById('reviewSpeedChart'), {
             type: 'bar',
-            data: { labels: review_speed.labels, datasets: [{ label: 'Avg Time to Comment (s)', data: review_speed.data, backgroundColor: '#FBBF24' }] },
+            data: { labels: tool_names, datasets: [{ label: 'Avg Time to Comment (s)', data: review_speed, backgroundColor: dynamicColors }] },
             options: commonChartOptions()
         }));
 
@@ -134,25 +158,51 @@ document.addEventListener('DOMContentLoaded', function() {
             activeCharts.push(new Chart(overlapCtx, {
                 type: 'bar',
                 data: {
-                    labels: topOverlaps.map(d => d.sets.join(' & ')), // The labels are the tool names
-                    datasets: [{
-                        label: 'Overlapping Findings',
-                        data: topOverlaps.map(d => d.size), // The data is the numeric count
-                        backgroundColor: '#F87171'
-                    }]
+                    labels: topOverlaps.map(d => d.sets.join(' & ')),
+                    datasets: [{ label: 'Overlapping Findings', data: topOverlaps.map(d => d.size), backgroundColor: '#F87171' }]
                 },
                 options: commonChartOptions('y')
             }));
         } else {
             document.getElementById('suggestionOverlapChart').style.display = 'none';
         }
+
+        activeCharts.push(new Chart(document.getElementById('noveltyScoreChart'), {
+            type: 'bar',
+            data: {
+                labels: tool_names,
+                datasets: [{
+                    label: 'Novelty Score (%)',
+                    data: novelty_score,
+                    backgroundColor: dynamicColors
+                }]
+            },
+            options: { ...commonChartOptions(), plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.raw}% Unique` } } } }
+        }));
+
+        activeCharts.push(new Chart(document.getElementById('findingsDensityChart'), {
+            type: 'bar',
+            data: {
+                labels: tool_names,
+                datasets: [{
+                    label: 'Findings per 100 LoC',
+                    data: findings_density,
+                    backgroundColor: dynamicColors
+                }]
+            },
+            options: { ...commonChartOptions(), plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.raw.toFixed(2)} / 100 LoC` } } } }
+        }));
     }
 
+    /**
+     * Renders the detailed finding cards.
+     * @param {object} results The analysis results from the API.
+     */
     function renderFindings(results) {
         const container = document.getElementById('detailed-findings');
-        container.innerHTML = `<h2>Consolidated Findings</h2>`; // Reset
+        container.innerHTML = `<h2>Consolidated Findings</h2>`;
         if (!results.findings || results.findings.length === 0) {
-            container.innerHTML += '<p class="no-data-message">No findings were reported by the automated tools for this pull request.</p>';
+            container.innerHTML += '<p class="no-data-message">No findings were reported for this pull request.</p>';
             return;
         }
 
@@ -161,19 +211,23 @@ document.addEventListener('DOMContentLoaded', function() {
             card.className = 'finding-card';
             let reviewsHTML = '';
             finding.reviews.forEach(review => {
-                const toolClassName = review.tool.replace(/\s+/g, '-');
+                const toolColor = stringToHslColor(review.tool);
+                const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
                 let diffHTML = '';
+
                 if (review.original_code && review.suggested_code) {
                     const diffString = `--- a/${finding.location}\n+++ b/${finding.location}\n${review.original_code.split('\n').map(l => `-${l}`).join('\n')}\n${review.suggested_code.split('\n').map(l => `+${l}`).join('\n')}`;
                     diffHTML = Diff2Html.html(diffString, {
-                        drawFileList: false,
-                        matching: 'lines',
-                        outputFormat: 'side-by-side'
+                        drawFileList: false, matching: 'lines', outputFormat: 'side-by-side'
                     });
                 }
+
                 reviewsHTML += `
-                    <div class="tool-review ${toolClassName}">
-                        <h4>${review.tool}</h4>
+                    <div class="tool-review">
+                        <h4 style="border-color: ${toolColor};">
+                            <span>${review.tool}</span>
+                            ${noveltyBadge}
+                        </h4>
                         <blockquote>${escapeHtml(review.comment)}</blockquote>
                         ${diffHTML ? `<div class="diff-container">${diffHTML}</div>` : ''}
                     </div>`;
@@ -188,8 +242,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    /**
+     * Escapes HTML to prevent XSS attacks.
+     * @param {string} unsafe The raw string.
+     * @returns {string} The escaped string.
+     */
     function escapeHtml(unsafe) {
         if (typeof unsafe !== 'string') { return ''; }
         return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
     }
+
+    // Initial load
+    getPullRequests();
 });
