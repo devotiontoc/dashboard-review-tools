@@ -115,36 +115,57 @@ exports.handler = async function(event, context) {
             if (!reviewTimes[currentTool]) reviewTimes[currentTool] = [];
             reviewTimes[currentTool].push(timeToComment);
 
+            // --- ✅ FIX STARTS HERE ---
+            // Updated regex to find 'suggestion' OR 'diff' blocks
+            const suggestionMatch = /```(suggestion|diff)\r?\n(.*?)\r?\n```/s.exec(commentBody);
+            let originalCode = null;
+            let suggestedCode = null;
 
-            const suggestionMatch = /```(suggestion|diff)\r?\n([\s\S]*?)```/s.exec(commentBody);
-            let originalCode = null, suggestedCode = null;
+            // --- Strategy 1: Look for a standard GitHub markdown suggestion block ---
+            const markdownRegex = /```suggestion\r?\n([\s\S]*?)```/s;
+            const markdownMatch = markdownRegex.exec(commentBody);
 
-            if (suggestionMatch) {
-                // The content of the code block is in the second capture group.
-                const blockContent = suggestionMatch[2];
-
-                // CORRECTED LOGIC:
-                // Always treat the content of 'suggestion' and 'diff' blocks as a diff.
-                // Both contain lines starting with '+' for additions and '-' for deletions.
+            if (markdownMatch) {
+                const blockContent = markdownMatch[1];
                 const lines = blockContent.split('\n');
-                originalCode = lines
-                    .filter(l => l.startsWith('-'))
-                    .map(l => l.substring(1))
-                    .join('\n');
 
-                suggestedCode = lines
-                    .filter(l => l.startsWith('+'))
-                    .map(l => l.substring(1))
-                    .join('\n');
+                originalCode = lines.filter(l => l.startsWith('-')).map(l => l.substring(1)).join('\n');
+                suggestedCode = lines.filter(l => l.startsWith('+')).map(l => l.substring(1)).join('\n');
 
-                // This fallback makes the logic more robust. If a suggestion block
-                // only contains additions, we can still find the original code
-                // from the comment's 'diff_hunk' provided by the GitHub API.
+                // If a suggestion only contains additions, use the diff_hunk to find the original code.
                 if (!originalCode && item.diff_hunk) {
                     originalCode = item.diff_hunk.split('\n')
                         .filter(line => line.startsWith('-') && !line.startsWith('---'))
                         .map(line => line.substring(1))
                         .join('\n');
+                }
+            }
+            // --- Strategy 2: If no markdown found, look for Copilot's plain-text format ---
+            else if (commentBody.includes('Suggested change') && item.diff_hunk) {
+                // In this format, the original code is the line being commented on in the diff.
+                const hunkLines = item.diff_hunk.split('\n');
+                const originalLine = hunkLines.find(line => line.startsWith('+') && !line.startsWith('+++'));
+
+                if (originalLine) {
+                    originalCode = originalLine.substring(1); // Get code by removing the '+' prefix
+
+                    // The suggested code is on the line following the "Suggested change" header.
+                    const commentLines = commentBody.split('\n');
+                    const headerIndex = commentLines.findIndex(line => line.trim() === 'Suggested change');
+
+                    if (headerIndex !== -1 && headerIndex + 1 < commentLines.length) {
+                        const diffLine = commentLines[headerIndex + 1].trim();
+
+                        // The plain-text diff often includes the original code and the new code mashed together.
+                        // We can attempt to isolate the new code by removing the original part from the start.
+                        const originalTrimmed = originalCode.trim();
+                        if (diffLine.startsWith(originalTrimmed)) {
+                            suggestedCode = diffLine.substring(originalTrimmed.length).trim();
+                        } else {
+                            // If the format is unexpected, we cannot reliably parse it.
+                            suggestedCode = null;
+                        }
+                    }
                 }
             }
             // --- ✅ FIX ENDS HERE ---
