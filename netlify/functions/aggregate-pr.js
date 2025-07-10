@@ -51,20 +51,29 @@ exports.handler = async function(event, context) {
         const prData = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
         const prCreatedAt = parseIsoTimestamp(prData.data.created_at);
 
-        // 1. Fetch all comments and reviews using Octokit's pagination
+        // 1. Use a Map to store all unique items by their ID
+        const allItems = new Map();
+
+        // 2. Fetch all top-level line comments and issue comments
         const reviewComments = await octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber });
+        reviewComments.forEach(item => allItems.set(item.id, item));
+
         const issueComments = await octokit.paginate(octokit.issues.listComments, { owner, repo, issue_number: prNumber });
+        issueComments.forEach(item => allItems.set(item.id, item));
+
+        // 3. Fetch all review submissions
         const reviews = await octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber });
 
-        // 2. Combine and deduplicate all comment-like items
-        const allItems = new Map();
-        [...reviewComments, ...issueComments].forEach(item => allItems.set(item.id, item));
-        reviews.forEach(review => {
+        for (const review of reviews) {
+            // Add the main review body if it exists (e.g., the "Overview" comment)
             if (review.body) {
-                // Treat review summaries as unique items
                 allItems.set(`review-summary-${review.id}`, review);
             }
-        });
+
+            // Fetch the line comments submitted with THIS review
+            const commentsForReview = await octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, review_id: review.id });
+            commentsForReview.forEach(comment => allItems.set(comment.id, comment));
+        }
 
         console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
 
