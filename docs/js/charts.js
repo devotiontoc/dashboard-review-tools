@@ -91,10 +91,6 @@ export const ChartManager = {
         this.renderSuggestionOverlapChart(results, filters);
     },
 
-    /**
-     * ✅ CORRECTION: Fully implemented history chart rendering.
-     * This function now fetches and renders its own data.
-     */
     async renderHistoryCharts() {
         const findingsCtx = document.getElementById('historyFindingsChart')?.getContext('2d');
         const noveltyCtx = document.getElementById('historyNoveltyChart')?.getContext('2d');
@@ -153,7 +149,9 @@ export const ChartManager = {
     renderFindingsByToolChart(results, filters) {
         const ctx = document.getElementById('findingsByToolChart')?.getContext('2d');
         if (!ctx) return;
-        const filteredData = this._filterDataByTool(results.summary_charts.findings_by_tool, results.metadata.tool_names, filters.tools);
+        const chartData = results.summary_charts.findings_by_tool;
+        if (!chartData) return;
+        const filteredData = this._filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
 
         this.activeCharts.findingsByTool = new Chart(ctx, {
             type: 'bar',
@@ -172,7 +170,9 @@ export const ChartManager = {
     renderFindingsByCategoryChart(results, filters) {
         const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
         if (!ctx) return;
-        const { labels, data } = results.summary_charts.findings_by_category;
+        const chartData = results.summary_charts.findings_by_category;
+        if (!chartData || !chartData.labels || !chartData.data) return;
+        const { labels, data } = chartData;
 
         this.activeCharts.findingsByCategory = new Chart(ctx, {
             type: 'doughnut',
@@ -204,25 +204,25 @@ export const ChartManager = {
     updateToolStrengthChart(results, filters) {
         const ctx = document.getElementById('toolStrengthChart')?.getContext('2d');
         if (!ctx) return;
-        const { tool_names, categories } = results.summary_charts.tool_strength_profile;
-        let data = results.summary_charts.tool_strength_profile.data;
-
-        let filteredLabels = tool_names;
-        let filteredData = data;
+        const chartData = results.summary_charts.tool_strength_profile;
+        if (!chartData) return;
+        const { tool_names, categories, data } = chartData;
 
         const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
-        filteredLabels = toolIndices.map(i => tool_names[i]);
-        filteredData = toolIndices.map(i => data[i]);
+        const filteredLabels = toolIndices.map(i => tool_names[i]);
+        const filteredData = toolIndices.map(i => data[i]);
 
         let chartDataSets;
         if (filters.category) {
             const categoryIndex = categories.indexOf(filters.category);
-            if (categoryIndex !== -1) {
+            if (categoryIndex > -1) {
                 chartDataSets = [{
                     label: filters.category,
                     data: filteredData.map(toolData => toolData[categoryIndex]),
                     backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5],
                 }];
+            } else {
+                chartDataSets = []; // Category not found, show no data
             }
         } else {
             chartDataSets = categories.map((cat, i) => ({
@@ -253,7 +253,9 @@ export const ChartManager = {
     renderFindingsByFileChart(results, filters) {
         const ctx = document.getElementById('findingsByFileChart')?.getContext('2d');
         if (!ctx) return;
-        const { labels, data } = results.summary_charts.findings_by_file;
+        const chartData = results.summary_charts.findings_by_file;
+        if (!chartData || !chartData.labels || !chartData.data) return;
+        const { labels, data } = chartData;
 
         this.activeCharts.findingsByFile = new Chart(ctx, {
             type: 'bar',
@@ -272,7 +274,9 @@ export const ChartManager = {
     renderNoveltyScoreChart(results, filters) {
         const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d');
         if (!ctx) return;
-        const filteredData = this._filterDataByTool(results.summary_charts.novelty_score, results.metadata.tool_names, filters.tools);
+        const chartData = results.summary_charts.novelty_score;
+        if (!chartData) return;
+        const filteredData = this._filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
 
         this.activeCharts.noveltyScore = new Chart(ctx, {
             type: 'bar',
@@ -291,7 +295,9 @@ export const ChartManager = {
     renderFindingsDensityChart(results, filters) {
         const ctx = document.getElementById('findingsDensityChart')?.getContext('2d');
         if (!ctx) return;
-        const filteredData = this._filterDataByTool(results.summary_charts.findings_density, results.metadata.tool_names, filters.tools);
+        const chartData = results.summary_charts.findings_density;
+        if (!chartData) return;
+        const filteredData = this._filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
 
         this.activeCharts.findingsDensity = new Chart(ctx, {
             type: 'bar',
@@ -310,7 +316,9 @@ export const ChartManager = {
     renderReviewSpeedChart(results, filters) {
         const ctx = document.getElementById('reviewSpeedChart')?.getContext('2d');
         if (!ctx) return;
-        const filteredData = this._filterDataByTool(results.summary_charts.review_speed.data, results.summary_charts.review_speed.labels, filters.tools);
+        const chartData = results.summary_charts.review_speed;
+        if (!chartData || !chartData.labels || !chartData.data) return;
+        const filteredData = this._filterDataByTool(chartData.data, chartData.labels, filters.tools);
 
         this.activeCharts.reviewSpeed = new Chart(ctx, {
             type: 'bar',
@@ -329,7 +337,9 @@ export const ChartManager = {
     renderCommentVerbosityChart(results, filters) {
         const ctx = document.getElementById('commentVerbosityChart')?.getContext('2d');
         if (!ctx) return;
-        const filteredData = this._filterDataByTool(results.summary_charts.comment_verbosity.data, results.summary_charts.comment_verbosity.labels, filters.tools);
+        const chartData = results.summary_charts.comment_verbosity;
+        if (!chartData || !chartData.labels || !chartData.data) return;
+        const filteredData = this._filterDataByTool(chartData.data, chartData.labels, filters.tools);
 
         this.activeCharts.commentVerbosity = new Chart(ctx, {
             type: 'bar',
