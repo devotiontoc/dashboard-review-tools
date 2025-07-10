@@ -12,7 +12,6 @@ const TOOL_IDENTIFIERS = {
     'devotiontoc': 'devotiontoc',
 };
 const TOOLS = Object.keys(TOOL_IDENTIFIERS);
-const KNOWN_BOT_IDS = new Set(Object.values(TOOL_IDENTIFIERS));
 
 // --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
@@ -48,35 +47,39 @@ exports.handler = async function(event, context) {
     const [owner, repo] = TARGET_GITHUB_REPO.split('/');
 
     try {
-        const prData = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
-        const prCreatedAt = parseIsoTimestamp(prData.data.created_at);
+        // --- 🚀 OPTIMIZATION 1: Fetch initial data in parallel ---
+        const [prData, reviewComments, issueComments, reviews] = await Promise.all([
+            octokit.pulls.get({ owner, repo, pull_number: prNumber }),
+            octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber }),
+            octokit.paginate(octokit.issues.listComments, { owner, repo, issue_number: prNumber }),
+            octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber })
+        ]);
 
-        // 1. Use a Map to store all unique items by their ID
+        const prCreatedAt = parseIsoTimestamp(prData.data.created_at);
         const allItems = new Map();
 
-        // 2. Fetch all top-level line comments and issue comments
-        const reviewComments = await octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber });
-        reviewComments.forEach(item => allItems.set(item.id, item));
+        // Add all fetched top-level comments to the map
+        [...reviewComments, ...issueComments].forEach(item => allItems.set(item.id, item));
 
-        const issueComments = await octokit.paginate(octokit.issues.listComments, { owner, repo, issue_number: prNumber });
-        issueComments.forEach(item => allItems.set(item.id, item));
-
-        // 3. Fetch all review submissions
-        const reviews = await octokit.paginate(octokit.pulls.listReviews, { owner, repo, pull_number: prNumber });
-
-        for (const review of reviews) {
-            // Add the main review body if it exists (e.g., the "Overview" comment)
+        // --- 🚀 OPTIMIZATION 2: Fetch comments for reviews in parallel ---
+        const reviewCommentPromises = reviews.map(review => {
+            // Add the review summary body itself
             if (review.body) {
                 allItems.set(`review-summary-${review.id}`, review);
             }
+            // Only fetch comments for reviews that have them (GitHub's API for this is tricky, so we fetch all)
+            return octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, review_id: review.id });
+        });
 
-            // Fetch the line comments submitted with THIS review
-            const commentsForReview = await octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, review_id: review.id });
-            commentsForReview.forEach(comment => allItems.set(comment.id, comment));
-        }
+        // Wait for all the comment requests to complete
+        const commentsFromReviews = await Promise.all(reviewCommentPromises);
+
+        // Flatten the array of arrays and add the comments to our map
+        commentsFromReviews.flat().forEach(comment => allItems.set(comment.id, comment));
 
         console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
 
+        // --- The rest of the function remains the same ---
         const findingsMap = {};
         const commentLengths = {};
         const reviewTimes = {};
@@ -125,7 +128,6 @@ exports.handler = async function(event, context) {
             commentLengths[currentTool].push(commentBody.length);
         }
 
-        // 3. Process the aggregated data
         const processedFindings = [];
         const categoryCounts = {};
         const toolFindingCounts = {};
@@ -136,7 +138,6 @@ exports.handler = async function(event, context) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
             if (reviewTools.size > 1) {
                 const sortedTools = Array.from(reviewTools).sort();
-                // Simple loop to create pairs manually
                 for (let i = 0; i < sortedTools.length; i++) {
                     for (let j = i + 1; j < sortedTools.length; j++) {
                         const pair = [sortedTools[i], sortedTools[j]];
@@ -145,6 +146,7 @@ exports.handler = async function(event, context) {
                     }
                 }
             }
+
             const allCommentsText = reviewsList.map(r => r.comment).join(" ");
             const category = categorizeComment(allCommentsText);
             categoryCounts[category] = (categoryCounts[category] || 0) + 1;
@@ -171,7 +173,6 @@ exports.handler = async function(event, context) {
             size: count
         }));
 
-        // 4. Construct the final JSON output
         const finalOutput = {
             metadata: { repo: TARGET_GITHUB_REPO, pr_number: parseInt(prNumber), tool_names: TOOLS },
             summary_charts: {
