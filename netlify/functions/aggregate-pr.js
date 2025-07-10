@@ -4,7 +4,7 @@ const stringSimilarity = require("string-similarity");
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
-const SIMILARITY_THRESHOLD = 0.7; // 70% similarity threshold
+const SIMILARITY_THRESHOLD = 0.1; // similarity threshold
 
 // --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
@@ -66,6 +66,8 @@ exports.handler = async function(event, context) {
         const commentsFromReviews = await Promise.all(reviewCommentPromises);
         commentsFromReviews.flat().forEach(comment => allItems.set(comment.id, comment));
 
+        console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
+
         const allCommentsList = Array.from(allItems.values());
         const findingsMap = {};
         const commentLengths = {};
@@ -113,20 +115,23 @@ exports.handler = async function(event, context) {
             if (!reviewTimes[currentTool]) reviewTimes[currentTool] = [];
             reviewTimes[currentTool].push(timeToComment);
 
+            // --- ✅ FIX STARTS HERE ---
+            // Updated regex to find 'suggestion' OR 'diff' blocks
             const suggestionMatch = /```(suggestion|diff)\r?\n(.*?)\r?\n```/s.exec(commentBody);
             let originalCode = null, suggestedCode = null;
-            if (suggestionMatch) {
-                // The actual code is the second capture group
-                const suggestionContent = suggestionMatch[2];
 
-                // For diff blocks, we need to separate the added/removed lines
-                if (suggestionMatch[1] === 'diff') {
-                    const lines = suggestionContent.split('\n');
+            if (suggestionMatch) {
+                const blockType = suggestionMatch[1]; // 'suggestion' or 'diff'
+                const blockContent = suggestionMatch[2]; // The code inside the block
+
+                if (blockType === 'diff') {
+                    // For diff blocks, parse added/removed lines
+                    const lines = blockContent.split('\n');
                     originalCode = lines.filter(l => l.startsWith('-')).map(l => l.substring(1)).join('\n');
                     suggestedCode = lines.filter(l => l.startsWith('+')).map(l => l.substring(1)).join('\n');
-                } else { // For suggestion blocks
-                    suggestedCode = suggestionContent;
-                    // Try to get original code from the diff_hunk if available
+                } else { // For 'suggestion' blocks
+                    suggestedCode = blockContent;
+                    // For suggestions, the original code comes from the main diff_hunk
                     if (item.diff_hunk) {
                         originalCode = item.diff_hunk.split('\n')
                             .filter(line => line.startsWith('-') && !line.startsWith('---'))
@@ -135,6 +140,7 @@ exports.handler = async function(event, context) {
                     }
                 }
             }
+            // --- ✅ FIX ENDS HERE ---
 
             if (!findingsMap[findingKey]) findingsMap[findingKey] = [];
             findingsMap[findingKey].push({
@@ -148,7 +154,6 @@ exports.handler = async function(event, context) {
             commentLengths[currentTool].push(commentBody.length);
         }
 
-        // --- The rest of the script for processing and output remains the same ---
         const novelFindingCount = {};
         for (const location in findingsMap) {
             const reviewsList = findingsMap[location];
@@ -187,7 +192,7 @@ exports.handler = async function(event, context) {
         const toolFindingCounts = {};
         const findingsPerFile = {};
         const overlapCounts = {};
-        const toolCategoryCounts = {};
+        const toolCategoryCounts = {}
 
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
@@ -268,6 +273,7 @@ exports.handler = async function(event, context) {
                     })
                 }
             },
+
             findings: processedFindings
         };
 
