@@ -134,8 +134,12 @@ document.addEventListener('DOMContentLoaded', function() {
             activeCharts.push(new Chart(overlapCtx, {
                 type: 'bar',
                 data: {
-                    labels: topOverlaps.map(d => d.sets.join(' & ')),
-                    datasets: [{ label: 'Overlapping Findings', data: topOverlaps.map(d => d.size), backgroundColor: '#F87171' }]
+                    labels: topOverlaps.map(d => d.sets.join(' & ')), // The labels are the tool names
+                    datasets: [{
+                        label: 'Overlapping Findings',
+                        data: topOverlaps.map(d => d.size), // The data is the numeric count
+                        backgroundColor: '#F87171'
+                    }]
                 },
                 options: commonChartOptions('y')
             }));
