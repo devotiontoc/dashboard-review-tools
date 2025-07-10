@@ -4,7 +4,7 @@ const stringSimilarity = require("string-similarity");
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
-const SIMILARITY_THRESHOLD = 0.7; // 70% similarity threshold
+const SIMILARITY_THRESHOLD = 0.1; // similarity threshold
 
 // --- Helper Functions ---
 function parseIsoTimestamp(tsStr) {
@@ -177,6 +177,7 @@ exports.handler = async function(event, context) {
         const toolFindingCounts = {};
         const findingsPerFile = {};
         const overlapCounts = {};
+        const toolCategoryCounts = {}
 
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
@@ -201,10 +202,13 @@ exports.handler = async function(event, context) {
             }
 
             reviewsList.forEach(review => {
-                toolFindingCounts[review.tool] = (toolFindingCounts[review.tool] || 0) + 1;
+                const tool = review.tool;
+                toolFindingCounts[tool] = (toolFindingCounts[tool] || 0) + 1;
                 if (review.is_novel) {
-                    novelFindingCount[review.tool] = (novelFindingCount[review.tool] || 0) + 1;
+                    novelFindingCount[tool] = (novelFindingCount[tool] || 0) + 1;
                 }
+                if (!toolCategoryCounts[tool]) toolCategoryCounts[tool] = {};
+                toolCategoryCounts[tool][category] = (toolCategoryCounts[tool][category] || 0) + 1;
             });
 
             processedFindings.push({ location, category, reviews: reviewsList });
@@ -244,8 +248,17 @@ exports.handler = async function(event, context) {
                 findings_density: finalToolList.map(tool => {
                     const total = toolFindingCounts[tool] || 0;
                     return linesChanged > 0 ? (total / linesChanged) * 100 : 0;
-                })
+                }),
+                tool_strength_profile: {
+                    tool_names: finalToolList,
+                    categories: Object.keys(categoryCounts),
+                    data: finalToolList.map(tool => {
+                        const counts = toolCategoryCounts[tool] || {};
+                        return Object.keys(categoryCounts).map(cat => counts[cat] || 0);
+                    })
+                }
             },
+
             findings: processedFindings
         };
 

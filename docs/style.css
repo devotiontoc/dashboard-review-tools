@@ -257,3 +257,84 @@ h2 {
     justify-content: space-between;
     align-items: center;
 }
+#history-section h2 {
+    text-align: center;
+    border-bottom: none;
+    margin-bottom: 2rem;
+}
+.history-charts h3 {
+    font-size: 1.2rem;
+    color: var(--color-text-secondary);
+    text-align: center;
+    margin: -1rem 0 1.5rem;
+}
+
+/* --- Findings View Toggle --- */
+.findings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 1rem;
+}
+.findings-header h2 {
+    border-bottom: none;
+    margin: 0;
+}
+.view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: var(--color-bg);
+    padding: 0.25rem;
+    border-radius: 6px;
+}
+.view-toggle label {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    margin-right: 0.5rem;
+}
+.view-toggle button {
+    border: none;
+    padding: 0.5rem 1rem;
+    background-color: transparent;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+.view-toggle button.active {
+    background-color: var(--color-accent);
+    color: var(--color-bg);
+}
+
+/* --- Unified Diff View --- */
+.unified-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    margin-top: 1rem;
+}
+.unified-diff-table td {
+    padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+.unified-diff-table .line-num {
+    color: var(--color-text-secondary);
+    text-align: right;
+    width: 40px;
+}
+.unified-diff-table .line-orig {
+    background-color: rgba(220, 38, 38, 0.15);
+}
+.unified-diff-table .line-sugg {
+    background-color: rgba(22, 163, 74, 0.15);
+}
+.unified-diff-table .tool-name-cell {
+    font-weight: bold;
+    padding-left: 2rem;
+    width: 150px;
+}
