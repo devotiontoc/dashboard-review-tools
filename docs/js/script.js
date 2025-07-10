@@ -239,7 +239,60 @@ document.addEventListener('DOMContentLoaded', () => {
     function createUnifiedCard(finding) {
         const card = document.createElement('div');
         card.className = 'finding-card';
-        card.innerHTML = `<div class="finding-card-header"><h3>Unified View for <code>${escapeHtml(finding.location)}</code></h3></div><div class="finding-card-body"><p class="no-data-message">Unified view not fully implemented in this version.</p></div>`;
+
+        // Separate reviews into those with code suggestions and those without
+        const reviewsWithSuggestions = finding.reviews.filter(r => r.suggested_code && r.original_code);
+        const reviewsWithoutSuggestions = finding.reviews.filter(r => !r.suggested_code || !r.original_code);
+
+        // Use the first review's original_code as the base for the diff
+        const originalCode = reviewsWithSuggestions[0]?.original_code || '';
+
+        // --- 1. Build the Unified Diff Table ---
+        let unifiedDiffHTML = `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
+
+        // Add original code lines (marked with '-')
+        originalCode.split('\n').forEach(line => {
+            unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+        });
+
+        // Add suggested code lines from each tool (marked with '+')
+        reviewsWithSuggestions.forEach(review => {
+            const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+            review.suggested_code.split('\n').forEach((line, i) => {
+                // Display the tool's name only on the first line of its suggestion
+                const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
+                unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+            });
+        });
+        unifiedDiffHTML += `</tbody></table></div>`;
+
+        // --- 2. Build the "Additional Comments" Section ---
+        let otherCommentsHTML = '';
+        if (reviewsWithoutSuggestions.length > 0) {
+            otherCommentsHTML = '<div class="other-comments-container"><h5>Additional Comments</h5>';
+            reviewsWithoutSuggestions.forEach(review => {
+                const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+                const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
+                // Strip out markdown code blocks from the comment text
+                const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
+
+                otherCommentsHTML += `
+                    <div class="tool-review-small" style="border-color: ${toolColor};">
+                        <h4><span>${escapeHtml(review.tool)}</span>${noveltyBadge}</h4>
+                        <blockquote>${commentText}</blockquote>
+                    </div>`;
+            });
+            otherCommentsHTML += '</div>';
+        }
+
+        // --- 3. Assemble the Final Card ---
+        card.innerHTML = `
+            <div class="finding-card-header">
+                <h3><code>${escapeHtml(finding.location)}</code></h3>
+                <span class="category ${escapeHtml(finding.category.toLowerCase().replace(/\s+/g, '-'))}">${escapeHtml(finding.category)}</span>
+            </div>
+            <div class="finding-card-body unified">${unifiedDiffHTML}${otherCommentsHTML}</div>`;
+
         return card;
     }
 
