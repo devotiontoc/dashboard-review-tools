@@ -54,14 +54,14 @@ export const ChartManager = {
             const canvas = wrapper.querySelector('canvas');
             let skeleton = wrapper.querySelector('.skeleton');
             if (show) {
-                canvas.style.display = 'none';
+                if (canvas) canvas.style.display = 'none';
                 if (!skeleton) {
                     skeleton = document.createElement('div');
                     skeleton.className = 'skeleton';
                     wrapper.appendChild(skeleton);
                 }
             } else {
-                canvas.style.display = 'block';
+                if (canvas) canvas.style.display = 'block';
                 if (skeleton) {
                     skeleton.remove();
                 }
@@ -70,13 +70,13 @@ export const ChartManager = {
     },
 
     // =================================================================
-    // INDIVIDUAL CHART RENDERING METHODS
+    // CHART GROUP RENDERERS
     // =================================================================
 
     renderOverviewCharts(results, filters) {
         this.renderFindingsByToolChart(results, filters);
         this.renderFindingsByCategoryChart(results, filters);
-        this.updateToolStrengthChart(results, filters); // Use update method for interactivity
+        this.updateToolStrengthChart(results, filters);
         this.renderFindingsByFileChart(results, filters);
     },
 
@@ -92,8 +92,13 @@ export const ChartManager = {
     },
 
     renderHistoryCharts(results) {
-        // This can be expanded to fetch its own data if needed
+        // This can be expanded to fetch its own data if needed.
+        // For now, we assume history data is loaded separately or not yet implemented.
     },
+
+    // =================================================================
+    // INDIVIDUAL CHART RENDERING METHODS
+    // =================================================================
 
     renderFindingsByToolChart(results, filters) {
         const ctx = document.getElementById('findingsByToolChart').getContext('2d');
@@ -130,7 +135,7 @@ export const ChartManager = {
             },
             options: {
                 plugins: {
-                    title: { display: true, text: 'Findings by Category' },
+                    title: { display: true, text: 'Findings by Category (Click to Filter)' },
                     legend: { position: 'right' }
                 },
                 onClick: (evt, elements) => {
@@ -184,12 +189,13 @@ export const ChartManager = {
             },
             options: {
                 scales: { x: { stacked: true }, y: { stacked: true } },
-                plugins: { legend: { display: true }, title: { display: true, text: 'Tool Strength Profile' } }
+                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
             }
         };
 
         if (this.activeCharts.toolStrength) {
             this.activeCharts.toolStrength.data = chartConfig.data;
+            this.activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text;
             this.activeCharts.toolStrength.update();
         } else {
             const ctx = document.getElementById('toolStrengthChart').getContext('2d');
@@ -197,7 +203,121 @@ export const ChartManager = {
         }
     },
 
-    // ... Implementations for all other charts (novelty, density, etc.) would follow a similar pattern ...
+    renderFindingsByFileChart(results, filters) {
+        const ctx = document.getElementById('findingsByFileChart').getContext('2d');
+        const { labels, data } = results.summary_charts.findings_by_file;
+
+        this.activeCharts.findingsByFile = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Findings per File',
+                    data: data,
+                    backgroundColor: '#A371F7',
+                }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } }
+        });
+    },
+
+    renderNoveltyScoreChart(results, filters) {
+        const ctx = document.getElementById('noveltyScoreChart').getContext('2d');
+        const filteredData = this._filterDataByTool(results.summary_charts.novelty_score, results.metadata.tool_names, filters.tools);
+
+        this.activeCharts.noveltyScore = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    label: 'Novelty Score (%)',
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => this.toolColorMap.get(tool)),
+                }]
+            },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } }
+        });
+    },
+
+    renderFindingsDensityChart(results, filters) {
+        const ctx = document.getElementById('findingsDensityChart').getContext('2d');
+        const filteredData = this._filterDataByTool(results.summary_charts.findings_density, results.metadata.tool_names, filters.tools);
+
+        this.activeCharts.findingsDensity = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    label: 'Findings per 100 LoC',
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => this.toolColorMap.get(tool)),
+                }]
+            },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } }
+        });
+    },
+
+    renderReviewSpeedChart(results, filters) {
+        const ctx = document.getElementById('reviewSpeedChart').getContext('2d');
+        const filteredData = this._filterDataByTool(results.summary_charts.review_speed.data, results.summary_charts.review_speed.labels, filters.tools);
+
+        this.activeCharts.reviewSpeed = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    label: 'Avg. Seconds to Comment',
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => this.toolColorMap.get(tool)),
+                }]
+            },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } }
+        });
+    },
+
+    renderCommentVerbosityChart(results, filters) {
+        const ctx = document.getElementById('commentVerbosityChart').getContext('2d');
+        const filteredData = this._filterDataByTool(results.summary_charts.comment_verbosity.data, results.summary_charts.comment_verbosity.labels, filters.tools);
+
+        this.activeCharts.commentVerbosity = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: filteredData.labels,
+                datasets: [{
+                    label: 'Avg. Characters per Comment',
+                    data: filteredData.data,
+                    backgroundColor: filteredData.labels.map(tool => this.toolColorMap.get(tool)),
+                }]
+            },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } }
+        });
+    },
+
+    renderSuggestionOverlapChart(results, filters) {
+        const ctx = document.getElementById('suggestionOverlapChart').getContext('2d');
+        const overlaps = (results.summary_charts.suggestion_overlap || [])
+            .filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool)))
+            .sort((a, b) => b.size - a.size)
+            .slice(0, 10);
+
+        if (overlaps.length === 0) {
+            // Handle case with no overlaps after filtering
+            return;
+        }
+
+        this.activeCharts.suggestionOverlap = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: overlaps.map(d => d.sets.join(' & ')),
+                datasets: [{
+                    label: 'Overlapping Findings',
+                    data: overlaps.map(d => d.size),
+                    backgroundColor: '#F87171'
+                }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } }
+        });
+    },
 
     // =================================================================
     // HELPER METHODS
