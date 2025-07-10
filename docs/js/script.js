@@ -226,14 +226,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
             let diffHTML = '';
 
-            // This is the trusted logic from your original script.
-            // It generates a diff view ONLY if the backend provides structured code data.
             if (review.original_code && review.suggested_code) {
                 const diffString = `--- a\n+++ b\n${review.original_code.split('\n').map(l => `-${l}`).join('\n')}\n${review.suggested_code.split('\n').map(l => `+${l}`).join('\n')}`;
                 diffHTML = Diff2Html.html(diffString, { drawFileList: false, matching: 'lines', outputFormat: 'side-by-side' });
             }
-
-            // This removes any markdown code blocks from the comment to avoid duplicating content.
             const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
 
             reviewsHTML += `
@@ -257,7 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'finding-card';
 
-        // This logic is taken directly from your original script.
         const reviewsWithSuggestions = finding.reviews.filter(r => r.suggested_code);
         const reviewsWithoutSuggestions = finding.reviews.filter(r => !r.suggested_code);
         const originalCode = reviewsWithSuggestions[0]?.original_code || '';
@@ -308,12 +303,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =================================================================
-    // 5. CHART RENDERING (Your existing functions remain here)
+    // 5. CHART RENDERING
     // =================================================================
 
     function renderCharts(results, filters) {
         destroyAllCharts();
         assignToolColors(results.metadata.tool_names);
+
         tryAndLog(renderFindingsByToolChart, 'FindingsByToolChart', results, filters);
         tryAndLog(renderFindingsByCategoryChart, 'FindingsByCategoryChart', results, filters);
         tryAndLog(renderToolStrengthChart, 'ToolStrengthChart', results, filters);
@@ -326,23 +322,89 @@ document.addEventListener('DOMContentLoaded', () => {
         tryAndLog(renderHistoryCharts, 'HistoryCharts');
     }
 
-    function tryAndLog(fn, chartName, ...args) { try { fn(...args); } catch (error) { console.error(`Failed to render chart: ${chartName}`, error); } }
-    function destroyAllCharts() { Object.values(activeCharts).forEach(chart => chart?.destroy()); activeCharts = {}; }
-    function assignToolColors(toolNames) { const DISTINCT_COLORS = ['#58A6FF', '#F778BA', '#3FB950', '#A371F7', '#F0B939', '#48D9A4']; toolColorMap.clear(); toolNames.forEach((toolName, index) => toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length])); }
-    function showSkeletons(show) { document.querySelectorAll('.chart-wrapper').forEach(wrapper => { const canvas = wrapper.querySelector('canvas'); let skeleton = wrapper.querySelector('.skeleton'); if (show) { if (canvas) canvas.style.display = 'none'; if (!skeleton) { skeleton = document.createElement('div'); skeleton.className = 'skeleton'; wrapper.appendChild(skeleton); } } else { if (canvas) canvas.style.display = 'block'; skeleton?.remove(); } }); }
-    function filterDataByTool(dataArray, allLabels, activeLabelsSet) { const filtered = { labels: [], data: [] }; allLabels.forEach((label, i) => { if (activeLabelsSet.has(label)) { filtered.labels.push(label); if (dataArray && dataArray[i] !== undefined) { filtered.data.push(dataArray[i]); } } }); return filtered; }
-    function renderFindingsByToolChart(results, filters) { const ctx = document.getElementById('findingsByToolChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_tool; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.findingsByTool = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } } }); }
+    function tryAndLog(fn, chartName, ...args) {
+        try {
+            fn(...args);
+        } catch (error) {
+            console.error(`Failed to render chart: ${chartName}`, error);
+        }
+    }
+
+    function destroyAllCharts() {
+        Object.values(activeCharts).forEach(chart => chart?.destroy());
+        activeCharts = {};
+    }
+
+    function assignToolColors(toolNames) {
+        const DISTINCT_COLORS = ['#58A6FF', '#F778BA', '#3FB950', '#A371F7', '#F0B939', '#48D9A4'];
+        toolColorMap.clear();
+        toolNames.forEach((toolName, index) => toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length]));
+    }
+
+    // A robust function to prepare a chart's canvas for re-rendering
+    function prepareCanvas(canvasId) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return null;
+        const wrapper = canvas.parentElement;
+        if (!wrapper) return null;
+        wrapper.innerHTML = `<canvas id="${canvasId}"></canvas>`;
+        return document.getElementById(canvasId);
+    }
+
+    function showSkeletons(show) {
+        document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
+            const canvas = wrapper.querySelector('canvas');
+            let skeleton = wrapper.querySelector('.skeleton');
+            if (show) {
+                if (canvas) canvas.style.display = 'none';
+                if (!skeleton) {
+                    skeleton = document.createElement('div');
+                    skeleton.className = 'skeleton';
+                    wrapper.appendChild(skeleton);
+                }
+            } else {
+                if (canvas) canvas.style.display = 'block';
+                skeleton?.remove();
+            }
+        });
+    }
+
+    function filterDataByTool(dataArray, allLabels, activeLabelsSet) {
+        const filtered = { labels: [], data: [] };
+        allLabels.forEach((label, i) => {
+            if (activeLabelsSet.has(label)) {
+                filtered.labels.push(label);
+                if (dataArray && dataArray[i] !== undefined) {
+                    filtered.data.push(dataArray[i]);
+                }
+            }
+        });
+        return filtered;
+    }
+
+    // --- Individual Chart Functions (with robust re-rendering) ---
+
+    function renderFindingsByToolChart(results, filters) {
+        const canvas = prepareCanvas('findingsByToolChart');
+        if (!canvas) return;
+        const chartData = results.summary_charts.findings_by_tool;
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.findingsByTool = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } }
+        });
+    }
+
     function renderFindingsByCategoryChart(results, filters) {
-        const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
-        if (!ctx) return;
+        const canvas = prepareCanvas('findingsByCategoryChart');
+        if (!canvas) return;
 
-        // Manually calculate category counts from the currently filtered findings
         const categoryCounts = results.findings.reduce((acc, finding) => {
-            // Check if any of this finding's reviews pass the tool filter
             const hasVisibleReview = finding.reviews.some(review => filters.tools.has(review.tool));
-
             if (hasVisibleReview) {
-                acc[finding.category] = (acc[finding.category] || 0) + finding.reviews.filter(r => filters.tools.has(r.tool)).length;
+                const count = finding.reviews.filter(r => filters.tools.has(r.tool)).length;
+                acc[finding.category] = (acc[finding.category] || 0) + count;
             }
             return acc;
         }, {});
@@ -350,60 +412,192 @@ document.addEventListener('DOMContentLoaded', () => {
         const labels = Object.keys(categoryCounts);
         const data = Object.values(categoryCounts);
 
-        // If there's no data after filtering, don't render the chart
         if (labels.length === 0) {
-            if (activeCharts.findingsByCategory) {
-                activeCharts.findingsByCategory.destroy();
-                delete activeCharts.findingsByCategory;
-            }
-            // Optional: show a message
-            ctx.canvas.parentElement.innerHTML = '<p class="no-data-message">No findings for selected tools.</p>';
+            canvas.parentElement.innerHTML = '<p class="no-data-message">No findings for selected tools.</p>';
             return;
-        } else {
-            // If we are re-rendering, ensure the canvas is visible
-            ctx.canvas.parentElement.innerHTML = '<canvas id="findingsByCategoryChart"></canvas>';
-            const newCtx = document.getElementById('findingsByCategoryChart').getContext('2d');
         }
 
-
-        if (activeCharts.findingsByCategory) {
-            activeCharts.findingsByCategory.data.labels = labels;
-            activeCharts.findingsByCategory.data.datasets[0].data = data;
-            activeCharts.findingsByCategory.update();
-        } else {
-            activeCharts.findingsByCategory = new Chart(document.getElementById('findingsByCategoryChart').getContext('2d'), {
-                type: 'doughnut',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939', '#A371F7']
-                    }]
-                },
-                options: {
-                    plugins: {
-                        title: { display: true, text: 'Findings by Category (Click to Filter)' },
-                        legend: { position: 'right' }
-                    },
-                    onClick: (_, elements) => {
-                        if (elements.length > 0 && activeCharts.findingsByCategory) {
-                            const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
-                            activeFilters.category = activeFilters.category === category ? null : category;
-                            tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters);
-                        }
+        activeCharts.findingsByCategory = new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939', '#A371F7'] }] },
+            options: {
+                plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } },
+                onClick: (_, elements) => {
+                    if (elements.length > 0 && activeCharts.findingsByCategory) {
+                        const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
+                        activeFilters.category = activeFilters.category === category ? null : category;
+                        tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters);
                     }
                 }
-            });
-        }
+            }
+        });
     }
-    function renderToolStrengthChart(results, filters) { const ctx = document.getElementById('toolStrengthChart')?.getContext('2d'); const chartData = results.summary_charts.tool_strength_profile; if (!ctx || !chartData) return; const { tool_names, categories, data } = chartData; const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1); const filteredLabels = toolIndices.map(i => tool_names[i]); const filteredData = toolIndices.map(i => data[i]); const chartConfig = { type: 'bar', options: { scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } } } }; if (filters.category) { const categoryIndex = categories.indexOf(filters.category); chartConfig.data = { labels: filteredLabels, datasets: (categoryIndex > -1) ? [{ label: filters.category, data: filteredData.map(d => d[categoryIndex]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5], }] : [] }; } else { chartConfig.data = { labels: filteredLabels, datasets: categories.map((cat, i) => ({ label: cat, data: filteredData.map(d => d[i]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5], })) }; } if (activeCharts.toolStrength) { activeCharts.toolStrength.data = chartConfig.data; activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text; activeCharts.toolStrength.update(); } else { activeCharts.toolStrength = new Chart(ctx, chartConfig); } }
-    function renderFindingsByFileChart(results, filters) { const ctx = document.getElementById('findingsByFileChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_file; if (!ctx || !chartData?.labels?.length) return; activeCharts.findingsByFile = new Chart(ctx, { type: 'bar', data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } } }); }
-    function renderNoveltyScoreChart(results, filters) { const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d'); const chartData = results.summary_charts.novelty_score; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.noveltyScore = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } } }); }
-    function renderFindingsDensityChart(results, filters) { const ctx = document.getElementById('findingsDensityChart')?.getContext('2d'); const chartData = results.summary_charts.findings_density; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.findingsDensity = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } } }); }
-    function renderReviewSpeedChart(results, filters) { const ctx = document.getElementById('reviewSpeedChart')?.getContext('2d'); const chartData = results.summary_charts.review_speed; if (!ctx || !chartData?.labels?.length) return; const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools); activeCharts.reviewSpeed = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } } }); }
-    function renderCommentVerbosityChart(results, filters) { const ctx = document.getElementById('commentVerbosityChart')?.getContext('2d'); const chartData = results.summary_charts.comment_verbosity; if (!ctx || !chartData?.labels?.length) return; const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools); activeCharts.commentVerbosity = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } } }); }
-    function renderSuggestionOverlapChart(results, filters) { const ctx = document.getElementById('suggestionOverlapChart')?.getContext('2d'); if (!ctx) return; const overlaps = (results.summary_charts.suggestion_overlap || []).filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool))).sort((a, b) => b.size - a.size).slice(0, 10); const wrapper = ctx.canvas.parentElement; const existingMessage = wrapper.querySelector('.no-data-message'); if (existingMessage) existingMessage.remove(); if (overlaps.length === 0) { const noDataMessage = document.createElement('p'); noDataMessage.className = 'no-data-message'; noDataMessage.textContent = 'No overlaps for selected tools.'; wrapper.appendChild(noDataMessage); return; } activeCharts.suggestionOverlap = new Chart(ctx, { type: 'bar', data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } } }); }
-    async function renderHistoryCharts() { const findingsCtx = document.getElementById('historyFindingsChart')?.getContext('2d'); const noveltyCtx = document.getElementById('historyNoveltyChart')?.getContext('2d'); if (!findingsCtx || !noveltyCtx) return; try { const response = await fetch('/api/get-history'); if (!response.ok) return; const historyData = await response.json(); if (historyData.length === 0) return; const tools = [...new Set(historyData.map(d => d.tool_name))]; assignToolColors(tools); const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b)); const createDataset = (metric) => tools.map(tool => ({ label: tool, data: labels.map(label => { const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool); return entry ? entry[metric] : null; }), borderColor: toolColorMap.get(tool), backgroundColor: toolColorMap.get(tool), tension: 0.2, spanGaps: true })); if(activeCharts.historyFindings) activeCharts.historyFindings.destroy(); activeCharts.historyFindings = new Chart(findingsCtx, { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } }); if(activeCharts.historyNovelty) activeCharts.historyNovelty.destroy(); activeCharts.historyNovelty = new Chart(noveltyCtx, { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } }); } catch (error) { console.error("Could not render history charts:", error); } }
+
+    function renderToolStrengthChart(results, filters) {
+        const canvas = prepareCanvas('toolStrengthChart');
+        if (!canvas) return;
+
+        const chartData = results.summary_charts.tool_strength_profile;
+        const { tool_names, categories, data } = chartData;
+
+        const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
+        const filteredLabels = toolIndices.map(i => tool_names[i]);
+        const filteredData = toolIndices.map(i => data[i]);
+
+        const chartConfig = {
+            type: 'bar',
+            options: {
+                scales: { x: { stacked: true }, y: { stacked: true } },
+                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
+            }
+        };
+
+        if (filters.category) {
+            const categoryIndex = categories.indexOf(filters.category);
+            chartConfig.data = {
+                labels: filteredLabels,
+                datasets: (categoryIndex > -1) ? [{
+                    label: filters.category,
+                    data: filteredData.map(d => d[categoryIndex]),
+                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5],
+                }] : []
+            };
+        } else {
+            chartConfig.data = {
+                labels: filteredLabels,
+                datasets: categories.map((cat, i) => ({
+                    label: cat,
+                    data: filteredData.map(d => d[i]),
+                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5],
+                }))
+            };
+        }
+
+        activeCharts.toolStrength = new Chart(canvas.getContext('2d'), chartConfig);
+    }
+
+    function renderFindingsByFileChart(results, filters) {
+        const canvas = prepareCanvas('findingsByFileChart');
+        if (!canvas) return;
+
+        const findingsPerFile = results.findings.reduce((acc, finding) => {
+            const hasVisibleReview = finding.reviews.some(review => filters.tools.has(review.tool));
+            if (hasVisibleReview && finding.location !== "General PR Summary") {
+                const file = finding.location.split(':')[0];
+                acc[file] = (acc[file] || 0) + 1;
+            }
+            return acc;
+        }, {});
+
+        const labels = Object.keys(findingsPerFile);
+        const data = Object.values(findingsPerFile);
+
+        if (labels.length === 0) {
+            canvas.parentElement.innerHTML = '<p class="no-data-message">No findings for selected tools.</p>';
+            return;
+        }
+
+        activeCharts.findingsByFile = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels, datasets: [{ data, backgroundColor: '#A371F7' }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } }
+        });
+    }
+
+    function renderNoveltyScoreChart(results, filters) {
+        const canvas = prepareCanvas('noveltyScoreChart');
+        if (!canvas) return;
+        const chartData = results.summary_charts.novelty_score;
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.noveltyScore = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } }
+        });
+    }
+
+    function renderFindingsDensityChart(results, filters) {
+        const canvas = prepareCanvas('findingsDensityChart');
+        if (!canvas) return;
+        const chartData = results.summary_charts.findings_density;
+        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
+        activeCharts.findingsDensity = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } }
+        });
+    }
+
+    function renderReviewSpeedChart(results, filters) {
+        const canvas = prepareCanvas('reviewSpeedChart');
+        if (!canvas) return;
+        const chartData = results.summary_charts.review_speed;
+        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
+        activeCharts.reviewSpeed = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } }
+        });
+    }
+
+    function renderCommentVerbosityChart(results, filters) {
+        const canvas = prepareCanvas('commentVerbosityChart');
+        if (!canvas) return;
+        const chartData = results.summary_charts.comment_verbosity;
+        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
+        activeCharts.commentVerbosity = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
+            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } }
+        });
+    }
+
+    function renderSuggestionOverlapChart(results, filters) {
+        const canvas = prepareCanvas('suggestionOverlapChart');
+        if (!canvas) return;
+        const overlaps = (results.summary_charts.suggestion_overlap || [])
+            .filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool)))
+            .sort((a, b) => b.size - a.size).slice(0, 10);
+
+        if (overlaps.length === 0) {
+            canvas.parentElement.innerHTML = '<p class="no-data-message">No overlaps for selected tools.</p>';
+            return;
+        }
+
+        activeCharts.suggestionOverlap = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } }
+        });
+    }
+
+    async function renderHistoryCharts() {
+        const findingsCanvas = prepareCanvas('historyFindingsChart');
+        const noveltyCanvas = prepareCanvas('historyNoveltyChart');
+        if (!findingsCanvas || !noveltyCanvas) return;
+        try {
+            const response = await fetch('/api/get-history');
+            if (!response.ok) return;
+            const historyData = await response.json();
+            if (historyData.length === 0) return;
+            const tools = [...new Set(historyData.map(d => d.tool_name))];
+            assignToolColors(tools);
+            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b));
+            const createDataset = (metric) => tools.map(tool => ({
+                label: tool,
+                data: labels.map(label => {
+                    const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool);
+                    return entry ? entry[metric] : null;
+                }),
+                borderColor: toolColorMap.get(tool),
+                backgroundColor: toolColorMap.get(tool),
+                tension: 0.2,
+                spanGaps: true
+            }));
+            activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } });
+            activeCharts.historyNovelty = new Chart(noveltyCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } });
+        } catch (error) { console.error("Could not render history charts:", error); }
+    }
 
     // =================================================================
     // 6. INITIALIZATION
@@ -411,21 +605,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function init() {
         // Set global Chart.js defaults
+        Chart.defaults.responsive = true;
+        Chart.defaults.maintainAspectRatio = false;
         Chart.defaults.color = 'var(--color-text-primary)';
         Chart.defaults.borderColor = 'var(--color-border)';
+
+        // Specific defaults for plugins and scales
         Chart.defaults.plugins.legend.position = 'bottom';
         Chart.defaults.plugins.legend.labels.boxWidth = 12;
         Chart.defaults.plugins.legend.labels.padding = 20;
-        Chart.defaults.responsive = true;
-        Chart.defaults.maintainAspectRatio = false;
-
         Chart.defaults.plugins.legend.labels.color = 'var(--color-text-primary)';
         Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
+
         Chart.defaults.scales.category.ticks.color = 'var(--color-text-secondary)';
         Chart.defaults.scales.linear.ticks.color = 'var(--color-text-secondary)';
 
-        Chart.defaults.plugins.legend.position = 'bottom';
-        Chart.defaults.plugins.legend.labels.boxWidth = 12;
 
         // Attach main event listeners
         fetchButton.addEventListener('click', fetchAnalysis);
