@@ -247,55 +247,78 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="finding-card-body">${reviewsHTML}</div>`;
         return card;
     }
-
+    function extractSuggestions(comment) {
+        const suggestions = [];
+        // Regex to find ``` followed by an optional language, then the code, then ```
+        // The 's' flag allows '.' to match newlines; 'g' finds all matches.
+        const regex = /```(?:suggestion|java|diff|)\s*([\s\S]*?)```/gs;
+        let match;
+        while ((match = regex.exec(comment)) !== null) {
+            // match[1] is the captured group—the code inside the backticks.
+            const code = match[1].trim();
+            if (code) {
+                suggestions.push(code);
+            }
+        }
+        return suggestions;
+    }
     function createUnifiedCard(finding) {
         const card = document.createElement('div');
         card.className = 'finding-card';
 
-        // Group reviews with suggestions by their exact original_code
+        // Group reviews by the original code they refer to.
         const suggestionsByOrigin = new Map();
         const reviewsWithoutSuggestions = [];
 
         finding.reviews.forEach(review => {
-            if (review.suggested_code && review.original_code) {
+            // 1. Actively extract all suggestions from the raw comment text.
+            const suggestions = extractSuggestions(review.comment);
+
+            if (suggestions.length > 0 && review.original_code) {
                 if (!suggestionsByOrigin.has(review.original_code)) {
                     suggestionsByOrigin.set(review.original_code, []);
                 }
-                suggestionsByOrigin.get(review.original_code).push(review);
+                // 2. Add the review, along with its list of extracted suggestions.
+                suggestionsByOrigin.get(review.original_code).push({ ...review, suggestions });
             } else {
                 reviewsWithoutSuggestions.push(review);
             }
         });
 
         let unifiedDiffHTML = '';
-        // For each unique block of original code, create a diff table
+        // 3. For each block of original code, create a diff table.
         suggestionsByOrigin.forEach((reviews, originalCode) => {
             unifiedDiffHTML += `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
 
-            // Add original code lines (marked with '-')
+            // Render the original code block once.
             originalCode.split('\n').forEach(line => {
                 unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
             });
 
-            // Add suggested code lines from each tool for this block
+            // 4. Render ALL suggestions for this original code block.
             reviews.forEach(review => {
                 const toolColor = toolColorMap.get(review.tool) || '#8B949E';
-                review.suggested_code.split('\n').forEach((line, i) => {
-                    const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
-                    unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+                // Loop through every suggestion found for this one review.
+                review.suggestions.forEach(suggestionCode => {
+                    suggestionCode.split('\n').forEach((line, i) => {
+                        // Show the tool name only on the first line of the suggestion group.
+                        const toolName = (i === 0) ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
+                        unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
+                    });
                 });
             });
             unifiedDiffHTML += `</tbody></table></div>`;
         });
 
-        // Build the section for other comments
+        // 5. Build the "Additional Comments" section for reviews that had no code.
         let otherCommentsHTML = '';
         if (reviewsWithoutSuggestions.length > 0) {
             otherCommentsHTML = '<div class="other-comments-container"><h5>Additional Comments</h5>';
             reviewsWithoutSuggestions.forEach(review => {
                 const toolColor = toolColorMap.get(review.tool) || '#8B949E';
                 const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
-                const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
+                // Display the raw comment, but strip out any ``` blocks to prevent rendering broken code.
+                const commentText = escapeHtml(review.comment.replace(/```[\s\S]*?```/g, ''));
 
                 otherCommentsHTML += `
                     <div class="tool-review-small" style="border-color: ${toolColor};">
