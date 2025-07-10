@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(errorData.error || `Aggregation failed with status: ${response.status}`);
             }
             const results = await response.json();
-
+            console.log("RESULTS FROM API:", results);
             renderCharts(results);
             renderFindings(results);
             dashboardContent.style.display = 'block';
