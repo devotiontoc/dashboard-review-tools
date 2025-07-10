@@ -138,11 +138,13 @@ body {
 .welcome-container h1 { font-size: 2rem; color: var(--color-text-header); }
 
 /* --- Charts & Dashboard Grid --- */
+
 .charts-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.5rem;
 }
+
 .single-col-grid { grid-template-columns: 1fr; }
 .chart-container {
     background-color: var(--color-bg-med);
@@ -154,7 +156,7 @@ body {
     display: flex;
     flex-direction: column;
 }
-.large-chart { grid-column: 1 / -1; } /* Make chart span full width */
+
 .chart-container h3 {
     margin: 0 0 1.5rem 0;
     font-size: 1.1rem;
@@ -198,15 +200,27 @@ body {
 .category.performance { background-color: #238636; color: white; }
 .category.bug { background-color: #D73A49; color: white; }
 .category.style-best-practice { background-color: #1F6FEB; color: white; }
-.finding-card-body { padding: 0; }
-.tool-review { border-top: 1px solid var(--color-border); }
+.finding-card-body {
+    padding: 1.5rem;
+    display: flex; /* Lays out children (tool-review) in a row */
+    gap: 1.5rem; /* Creates space between the cards */
+    flex-wrap: wrap; /* Allows cards to wrap to the next line on small screens */
+}
+.tool-review {
+    border: 1px solid var(--color-border);
+    flex: 1; /* Allows cards to grow and fill space */
+    min-width: 350px; /* Prevents cards from getting too narrow */
+    border-radius: var(--border-radius);
+    background-color: var(--color-bg-dark);
+    display: flex;
+    flex-direction: column;
+}
 .tool-review:first-child { border-top: none; }
 .tool-review h4 { margin: 0; padding: 0.75rem 1.5rem; background: var(--color-bg-light); border-bottom: 1px solid var(--color-border); border-left: 4px solid; display: flex; justify-content: space-between; align-items: center; font-size: 1rem; }
-.tool-review blockquote { margin: 0; padding: 1rem 1.5rem; white-space: pre-wrap; font-size: 0.95rem; }
+.tool-review blockquote { margin: 0; padding: 1rem 1.5rem; white-space: pre-wrap; font-size: 0.95rem; flex-grow: 1; }
 .novelty-badge { font-size: 0.75rem; font-weight: 600; padding: 0.2rem 0.5rem; border-radius: 9999px; background-color: var(--color-accent); color: var(--color-bg-dark); }
-.diff-container { margin: 1rem 1.5rem; border-radius: var(--border-radius); overflow: hidden; border: 1px solid var(--color-border); }
-.d2h-file-header { display: none; }
-.d2h-d-none { display: none; } /* Hide file list header */
+.diff-container { margin: 0 1.5rem 1.5rem; border-radius: var(--border-radius); overflow: hidden; border: 1px solid var(--color-border); }
+.d2h-file-header, .d2h-d-none { display: none; }
 .d2h-code-line-ctn { font-family: var(--font-mono); font-size: 0.85rem; background-color: transparent !important; color: var(--color-text-secondary); }
 .d2h-code-side-linenumber { background-color: var(--color-bg-med) !important; }
 .d2h-code-line-ins { background-color: rgba(63, 185, 80, 0.15); }

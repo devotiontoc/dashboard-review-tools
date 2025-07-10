@@ -49,12 +49,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function switchView(viewName) {
-        // Hide all views
         views.forEach(view => view.style.display = 'none');
-        // Show target view
         document.getElementById(`view-${viewName}`).style.display = 'block';
 
-        // Update active link
         navLinks.forEach(link => {
             link.classList.toggle('active', link.getAttribute('data-view') === viewName);
         });
@@ -88,7 +85,6 @@ document.addEventListener('DOMContentLoaded', function() {
         fetchButton.disabled = true;
         errorDisplay.style.display = 'none';
 
-        // Clear previous results
         activeCharts.forEach(chart => chart.destroy());
         activeCharts = [];
 
@@ -97,16 +93,14 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!response.ok) throw new Error((await response.json()).error || `Aggregation failed.`);
             currentAnalysisResults = await response.json();
 
-            // Render all data and switch to dashboard view
             renderAll(currentAnalysisResults);
             switchView('dashboard');
 
-            // Asynchronously save and update history
             saveAnalysis(currentAnalysisResults).then(renderHistory);
 
         } catch (error) {
             showError(`An error analyzing PR #${prNumber}: ${error.message}`);
-            switchView('initial'); // Revert to initial view on error
+            switchView('initial');
         } finally {
             loader.style.display = 'none';
             fetchButton.disabled = false;
@@ -118,7 +112,7 @@ document.addEventListener('DOMContentLoaded', function() {
         assignToolColors(results.metadata.tool_names);
         renderKPIs(results);
         renderCharts(results);
-        renderFindings(results); // Pre-render findings for when user navigates
+        renderFindings(results);
     }
 
     async function saveAnalysis(results) {
@@ -137,6 +131,81 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    // --- Rendering Functions ---
+
+    function renderCharts(results) {
+        const { tool_names } = results.metadata;
+        const {
+            findings_by_tool, findings_by_category, novelty_score, findings_density,
+            tool_strength_profile, review_speed, comment_verbosity, findings_by_file,
+            suggestion_overlap
+        } = results.summary_charts;
+        const dynamicColors = tool_names.map(name => getToolColor(name));
+        const categoryColors = ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'];
+
+        const commonChartOptions = (options = {}) => {
+            const { indexAxis = 'x', legendDisplay = false, stacked = false } = options;
+            return {
+                indexAxis,
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: legendDisplay,
+                        labels: {
+                            color: 'var(--color-text-header)'
+                        }
+                    },
+                    tooltip: {
+                        titleColor: 'var(--color-text-header)',
+                        bodyColor: 'var(--color-text-primary)'
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked,
+                        ticks: { color: 'var(--color-text-secondary)' },
+                        grid: { color: 'var(--color-border)' }
+                    },
+                    y: {
+                        stacked,
+                        beginAtZero: true,
+                        ticks: { color: 'var(--color-text-secondary)' },
+                        grid: { color: 'var(--color-border)' }
+                    }
+                }
+            };
+        };
+
+        activeCharts.push(new Chart(document.getElementById('findingsByToolChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Findings', data: findings_by_tool, backgroundColor: dynamicColors }] }, options: commonChartOptions({indexAxis: 'y'}) }));
+        activeCharts.push(new Chart(document.getElementById('findingsByCategoryChart'), { type: 'doughnut', data: { labels: findings_by_category.labels, datasets: [{ data: findings_by_category.data, backgroundColor: categoryColors }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'right', labels: { color: 'var(--color-text-header)' } } } } }));
+        activeCharts.push(new Chart(document.getElementById('noveltyScoreChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Novelty Score (%)', data: novelty_score, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+        activeCharts.push(new Chart(document.getElementById('findingsDensityChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Findings per 100 LoC', data: findings_density, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+
+        activeCharts.push(new Chart(document.getElementById('reviewSpeedChart'), { type: 'bar', data: { labels: review_speed.labels, datasets: [{ label: 'Avg Time to Comment (s)', data: review_speed.data, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+        activeCharts.push(new Chart(document.getElementById('commentVerbosityChart'), { type: 'bar', data: { labels: comment_verbosity.labels, datasets: [{ label: 'Average Chars per Comment', data: comment_verbosity.data, backgroundColor: dynamicColors }] }, options: commonChartOptions() }));
+
+        const topOverlaps = suggestion_overlap.filter(item => item.sets.length > 1).sort((a, b) => b.size - a.size).slice(0, 5);
+        if (topOverlaps.length > 0) {
+            activeCharts.push(new Chart(document.getElementById('suggestionOverlapChart'), { type: 'bar', data: { labels: topOverlaps.map(d => d.sets.join(' & ')), datasets: [{ label: 'Overlapping Findings', data: topOverlaps.map(d => d.size), backgroundColor: '#F87171' }] }, options: commonChartOptions({ indexAxis: 'y' }) }));
+        }
+
+        activeCharts.push(new Chart(document.getElementById('findingsByFileChart'), { type: 'bar', data: { labels: findings_by_file.labels, datasets: [{ label: 'Number of Findings', data: findings_by_file.data, backgroundColor: '#A371F7' }] }, options: commonChartOptions({ indexAxis: 'y' }) }));
+
+        activeCharts.push(new Chart(document.getElementById('toolStrengthChart'), {
+            type: 'bar',
+            data: {
+                labels: tool_strength_profile.tool_names,
+                datasets: tool_strength_profile.categories.map((cat, i) => ({
+                    label: cat,
+                    data: tool_strength_profile.data.map(toolData => toolData[i]),
+                    backgroundColor: categoryColors[i % categoryColors.length]
+                }))
+            },
+            options: commonChartOptions({ legendDisplay: true, stacked: true })
+        }));
+    }
+
     async function renderHistory() {
         try {
             const response = await fetch('/api/get-history');
@@ -145,7 +214,7 @@ document.addEventListener('DOMContentLoaded', function() {
             if (historyData.length === 0) return;
 
             const tools = [...new Set(historyData.map(d => d.tool_name))];
-            assignToolColors(tools); // Ensure colors are consistent
+            assignToolColors(tools);
 
             const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString()))].sort((a,b) => new Date(a) - new Date(b));
 
@@ -161,50 +230,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 spanGaps: true
             }));
 
-            const commonOptions = { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } }, y: { ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } } }, plugins: { legend: { labels: { color: 'var(--color-text-primary)' } } } };
+            const historyChartOptions = commonChartOptions({ legendDisplay: true });
 
-            activeCharts.push(new Chart(document.getElementById('historyFindingsChart'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: commonOptions }));
-            activeCharts.push(new Chart(document.getElementById('historyNoveltyChart'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: commonOptions }));
+            activeCharts.push(new Chart(document.getElementById('historyFindingsChart'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: historyChartOptions }));
+            activeCharts.push(new Chart(document.getElementById('historyNoveltyChart'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: historyChartOptions }));
 
         } catch (error) {
             console.error("Could not render history:", error);
         }
     }
 
-    // --- Rendering Functions ---
     function renderKPIs(results) {
         const { summary_charts, metadata } = results;
         kpiTotalFindings.textContent = summary_charts.findings_by_tool.reduce((a, b) => a + b, 0);
         kpiLinesAnalyzed.textContent = metadata.lines_changed;
-        const avgNovelty = summary_charts.novelty_score.reduce((a, b) => a + b, 0) / summary_charts.novelty_score.length;
+        const totalNovelty = summary_charts.novelty_score.reduce((a, b) => a + b, 0);
+        const avgNovelty = summary_charts.novelty_score.length > 0 ? totalNovelty / summary_charts.novelty_score.length : 0;
         kpiAvgNovelty.textContent = `${avgNovelty.toFixed(0)}%`;
-    }
-
-    function renderCharts(results) {
-        const { tool_names } = results.metadata;
-        const { findings_by_tool, findings_by_category, novelty_score, findings_density, tool_strength_profile } = results.summary_charts;
-        const dynamicColors = tool_names.map(name => getToolColor(name));
-        const categoryColors = ['#DA3633', '#238636', '#D73A49', '#1F6FEB'];
-
-        const commonOptions = (legendDisplay = false) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: legendDisplay, labels: { color: 'var(--color-text-primary)'} } }, scales: { x: { ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } }, y: { beginAtZero: true, ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } } } });
-
-        activeCharts.push(new Chart(document.getElementById('findingsByToolChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Findings', data: findings_by_tool, backgroundColor: dynamicColors }] }, options: commonOptions() }));
-        activeCharts.push(new Chart(document.getElementById('findingsByCategoryChart'), { type: 'doughnut', data: { labels: findings_by_category.labels, datasets: [{ data: findings_by_category.data, backgroundColor: categoryColors }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'right', labels: { color: 'var(--color-text-primary)' } } } } }));
-        activeCharts.push(new Chart(document.getElementById('noveltyScoreChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Novelty Score (%)', data: novelty_score, backgroundColor: dynamicColors }] }, options: commonOptions() }));
-        activeCharts.push(new Chart(document.getElementById('findingsDensityChart'), { type: 'bar', data: { labels: tool_names, datasets: [{ label: 'Findings per 100 LoC', data: findings_density, backgroundColor: dynamicColors }] }, options: commonOptions() }));
-
-        activeCharts.push(new Chart(document.getElementById('toolStrengthChart'), {
-            type: 'bar',
-            data: {
-                labels: tool_strength_profile.tool_names,
-                datasets: tool_strength_profile.categories.map((cat, i) => ({
-                    label: cat,
-                    data: tool_strength_profile.data.map(toolData => toolData[i]),
-                    backgroundColor: categoryColors[i % categoryColors.length]
-                }))
-            },
-            options: { ...commonOptions(true), scales: { x: { stacked: true, ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } }, y: { stacked: true, ticks: { color: 'var(--color-text-secondary)' }, grid: { color: 'var(--color-border)' } } } }
-        }));
     }
 
     viewSideBySideBtn.addEventListener('click', () => {
@@ -222,7 +264,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function renderFindings(results) {
-        findingsContainer.innerHTML = ''; // Clear previous
+        findingsContainer.innerHTML = '';
         if (!results?.findings || results.findings.length === 0) {
             findingsContainer.innerHTML = '<p class="no-data-message">No findings were reported for this pull request.</p>';
             return;
@@ -238,6 +280,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderSideBySideCard(finding) {
         const card = document.createElement('div');
         card.className = 'finding-card';
+
         let reviewsHTML = '';
         finding.reviews.forEach(review => {
             const toolColor = getToolColor(review.tool);
@@ -255,6 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     ${diffHTML ? `<div class="diff-container">${diffHTML}</div>` : ''}
                 </div>`;
         });
+
         card.innerHTML = `
             <div class="finding-card-header">
                 <h3><code>${finding.location}</code></h3>
@@ -320,6 +364,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Initial Load ---
     getPullRequests();
-    renderHistory(); // Attempt to render history on page load
+    renderHistory();
     switchView('initial');
 });

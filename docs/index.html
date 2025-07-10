@@ -6,6 +6,7 @@
     <title>AI Reviewer Analysis Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
 </head>
 <body>
 
@@ -30,7 +31,7 @@
             </a>
         </nav>
         <div class="sidebar-footer">
-            <p>Version 2.0</p>
+            <p>Version 2.1</p>
         </div>
     </aside>
 
@@ -38,7 +39,7 @@
         <header class="top-bar">
             <div class="controls-container">
                 <div class="control-item">
-                    <label for="pr-select"><i class="fas fa-pull-request"></i> Select Pull Request</label>
+                    <label for="pr-select"><i class="fa-solid fa-code-pull-request"></i> Select Pull Request</label>
                     <select id="pr-select" name="pr-select">
                         <option>Loading PRs...</option>
                     </select>
@@ -84,7 +85,7 @@
                         <h3>Findings by Category</h3>
                         <div class="chart-wrapper"><canvas id="findingsByCategoryChart"></canvas></div>
                     </div>
-                    <div class="chart-container large-chart">
+                    <div class="chart-container">
                         <h3>Tool Strength Profile</h3>
                         <div class="chart-wrapper"><canvas id="toolStrengthChart"></canvas></div>
                     </div>
@@ -93,37 +94,32 @@
                         <div class="chart-wrapper"><canvas id="noveltyScoreChart"></canvas></div>
                     </div>
                     <div class="chart-container">
-                        <h3>Findings Density</h3>
+                        <h3>Findings Density (per 100 LoC)</h3>
                         <div class="chart-wrapper"><canvas id="findingsDensityChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Review Speed (Avg. Seconds)</h3>
+                        <div class="chart-wrapper"><canvas id="reviewSpeedChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Comment Verbosity (Avg. Chars)</h3>
+                        <div class="chart-wrapper"><canvas id="commentVerbosityChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Findings per File</h3>
+                        <div class="chart-wrapper"><canvas id="findingsByFileChart"></canvas></div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Suggestion Overlaps</h3>
+                        <div class="chart-wrapper"><canvas id="suggestionOverlapChart"></canvas></div>
                     </div>
                 </div>
             </section>
 
             <section id="view-history" class="app-view" style="display: none;">
-                <h2>Historical Performance Trends</h2>
-                <div class="charts-grid single-col-grid">
-                    <div class="chart-container">
-                        <h3>Findings Over Time</h3>
-                        <div class="chart-wrapper"><canvas id="historyFindingsChart"></canvas></div>
-                    </div>
-                    <div class="chart-container">
-                        <h3>Novelty Score Over Time (%)</h3>
-                        <div class="chart-wrapper"><canvas id="historyNoveltyChart"></canvas></div>
-                    </div>
-                </div>
             </section>
 
             <section id="view-findings" class="app-view" style="display: none;">
-                <div class="findings-header">
-                    <h2>Consolidated Findings</h2>
-                    <div class="view-toggle">
-                        <label>View Mode:</label>
-                        <button id="view-side-by-side" class="active" title="Show each review in its own card">Cards</button>
-                        <button id="view-unified" title="Combine suggestions for the same code block">Unified</button>
-                    </div>
-                </div>
-                <div id="detailed-findings-container">
-                </div>
             </section>
         </main>
     </div>
