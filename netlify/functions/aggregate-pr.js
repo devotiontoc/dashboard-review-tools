@@ -73,8 +73,6 @@ exports.handler = async function(event, context) {
             const author = item.user?.login;
             if (!author) continue;
 
-            // --- ✅ SIMPLIFIED LOGIC ---
-            // Treat every unique commenter as a tool. No filtering.
             const currentTool = author;
             discoveredTools.add(currentTool);
 
@@ -102,8 +100,13 @@ exports.handler = async function(event, context) {
             }
 
             const filePath = item.path;
-            const line = item.line || item.start_line;
-            const findingKey = (filePath && line) ? `${filePath}:${line}` : "General PR Summary";
+
+            // --- ✅ NEW GROUPING LOGIC ---
+            // A comment can be on a single line ('line') or a range ('start_line' to 'line').
+            // To group them, we use the start_line if it exists, otherwise we use the single line number.
+            const representativeLine = item.start_line || item.line;
+            const findingKey = (filePath && representativeLine) ? `${filePath}:${representativeLine}` : "General PR Summary";
+            // --- END NEW LOGIC ---
 
             if (!findingsMap[findingKey]) findingsMap[findingKey] = [];
             findingsMap[findingKey].push({
