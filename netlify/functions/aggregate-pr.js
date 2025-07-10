@@ -4,17 +4,7 @@ const { Octokit } = require("@octokit/rest");
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const TARGET_GITHUB_REPO = process.env.TARGET_GITHUB_REPO;
 
-const TOOL_IDENTIFIERS = {
-    'CodeRabbit': 'coderabbitai[bot]',
-    'BitoAI': 'bito-code-review[bot]',
-    'Codacy': 'codacy-production[bot]',
-    'GitHub Copilot': 'copilot-pull-request-reviewer[bot]',
-    'devotiontoc': 'devotiontoc',
-    'Copilot': 'Copilot'
-};
-const TOOLS = Object.keys(TOOL_IDENTIFIERS);
-
-// --- Helper Functions ---
+// --- Helper Functions (No changes here) ---
 function parseIsoTimestamp(tsStr) {
     if (!tsStr) return null;
     return new Date(tsStr);
@@ -48,7 +38,8 @@ exports.handler = async function(event, context) {
     const [owner, repo] = TARGET_GITHUB_REPO.split('/');
 
     try {
-        // --- 🚀 OPTIMIZATION 1: Fetch initial data in parallel ---
+        const discoveredTools = new Set();
+
         const [prData, reviewComments, issueComments, reviews] = await Promise.all([
             octokit.pulls.get({ owner, repo, pull_number: prNumber }),
             octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber }),
@@ -59,36 +50,33 @@ exports.handler = async function(event, context) {
         const prCreatedAt = parseIsoTimestamp(prData.data.created_at);
         const allItems = new Map();
 
-        // Add all fetched top-level comments to the map
         [...reviewComments, ...issueComments].forEach(item => allItems.set(item.id, item));
 
-        // --- 🚀 OPTIMIZATION 2: Fetch comments for reviews in parallel ---
         const reviewCommentPromises = reviews.map(review => {
-            // Add the review summary body itself
             if (review.body) {
                 allItems.set(`review-summary-${review.id}`, review);
             }
-            // Only fetch comments for reviews that have them (GitHub's API for this is tricky, so we fetch all)
             return octokit.paginate(octokit.pulls.listReviewComments, { owner, repo, pull_number: prNumber, review_id: review.id });
         });
 
-        // Wait for all the comment requests to complete
         const commentsFromReviews = await Promise.all(reviewCommentPromises);
 
-        // Flatten the array of arrays and add the comments to our map
         commentsFromReviews.flat().forEach(comment => allItems.set(comment.id, comment));
 
         console.log(`Successfully fetched a total of ${allItems.size} unique comments and review summaries.`);
 
-        // --- The rest of the function remains the same ---
         const findingsMap = {};
         const commentLengths = {};
         const reviewTimes = {};
 
         for (const item of allItems.values()) {
             const author = item.user?.login;
-            const currentTool = TOOLS.find(name => TOOL_IDENTIFIERS[name] === author);
-            if (!currentTool) continue;
+            if (!author) continue;
+
+            // --- ✅ SIMPLIFIED LOGIC ---
+            // Treat every unique commenter as a tool. No filtering.
+            const currentTool = author;
+            discoveredTools.add(currentTool);
 
             const commentBody = item.body || '';
             if (!commentBody) continue;
@@ -97,7 +85,7 @@ exports.handler = async function(event, context) {
             const commentCreatedAt = parseIsoTimestamp(timestampStr);
             if (!commentCreatedAt) continue;
 
-            const timeToComment = (commentCreatedAt - prCreatedAt) / 1000; // in seconds
+            const timeToComment = (commentCreatedAt - prCreatedAt) / 1000;
             if (!reviewTimes[currentTool]) reviewTimes[currentTool] = [];
             reviewTimes[currentTool].push(timeToComment);
 
@@ -174,14 +162,20 @@ exports.handler = async function(event, context) {
             size: count
         }));
 
+        const finalToolList = Array.from(discoveredTools).sort();
+
         const finalOutput = {
-            metadata: { repo: TARGET_GITHUB_REPO, pr_number: parseInt(prNumber), tool_names: TOOLS },
+            metadata: {
+                repo: TARGET_GITHUB_REPO,
+                pr_number: parseInt(prNumber),
+                tool_names: finalToolList
+            },
             summary_charts: {
-                findings_by_tool: TOOLS.map(tool => toolFindingCounts[tool] || 0),
+                findings_by_tool: finalToolList.map(tool => toolFindingCounts[tool] || 0),
                 findings_by_category: { labels: Object.keys(categoryCounts), data: Object.values(categoryCounts) },
-                comment_verbosity: { labels: TOOLS, data: TOOLS.map(tool => getAvg(commentLengths, tool)) },
+                comment_verbosity: { labels: finalToolList, data: finalToolList.map(tool => getAvg(commentLengths, tool)) },
                 findings_by_file: { labels: Object.keys(findingsPerFile), data: Object.values(findingsPerFile) },
-                review_speed: { labels: TOOLS, data: TOOLS.map(tool => getAvg(reviewTimes, tool)) },
+                review_speed: { labels: finalToolList, data: finalToolList.map(tool => getAvg(reviewTimes, tool)) },
                 suggestion_overlap: overlapDataForJson
             },
             findings: processedFindings
