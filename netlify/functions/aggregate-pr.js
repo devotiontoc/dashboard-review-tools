@@ -1,5 +1,5 @@
 const { Octokit } = require("@octokit/rest");
-const { combinations } = require('js-combinatorics');
+const Combinatorics = require('js-combinatorics');
 
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -127,7 +127,7 @@ exports.handler = async function(event, context) {
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
             if (reviewTools.size > 1) {
-                const toolPairs = combinations(Array.from(reviewTools).sort(), 2);
+                const toolPairs = Combinatorics.combinations(Array.from(reviewTools).sort(), 2);
                 toolPairs.forEach(pair => {
                     const key = pair.join(' & ');
                     overlapCounts[key] = (overlapCounts[key] || 0) + 1;
