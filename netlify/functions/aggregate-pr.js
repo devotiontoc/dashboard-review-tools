@@ -1,5 +1,4 @@
 const { Octokit } = require("@octokit/rest");
-const Combinatorics = require('js-combinatorics');
 
 // --- Configuration ---
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -127,11 +126,15 @@ exports.handler = async function(event, context) {
         for (const [location, reviewsList] of Object.entries(findingsMap)) {
             const reviewTools = new Set(reviewsList.map(r => r.tool));
             if (reviewTools.size > 1) {
-                const toolPairs = Combinatorics.combination(Array.from(reviewTools).sort(), 2);
-                toolPairs.forEach(pair => {
-                    const key = pair.join(' & ');
-                    overlapCounts[key] = (overlapCounts[key] || 0) + 1;
-                });
+                const sortedTools = Array.from(reviewTools).sort();
+                // Simple loop to create pairs manually
+                for (let i = 0; i < sortedTools.length; i++) {
+                    for (let j = i + 1; j < sortedTools.length; j++) {
+                        const pair = [sortedTools[i], sortedTools[j]];
+                        const key = pair.join(' & ');
+                        overlapCounts[key] = (overlapCounts[key] || 0) + 1;
+                    }
+                }
             }
             const allCommentsText = reviewsList.map(r => r.comment).join(" ");
             const category = categorizeComment(allCommentsText);
