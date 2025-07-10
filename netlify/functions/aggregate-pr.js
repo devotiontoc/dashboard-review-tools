@@ -10,6 +10,7 @@ const TOOL_IDENTIFIERS = {
     'Codacy': 'codacy-production[bot]',
     'GitHub Copilot': 'copilot-pull-request-reviewer[bot]',
     'devotiontoc': 'devotiontoc',
+    'Copilot': 'Copilot'
 };
 const TOOLS = Object.keys(TOOL_IDENTIFIERS);
 
