@@ -10,3 +10,6 @@ functions = "netlify/functions"
 from = "/api/*"
 to = "/.netlify/functions/:splat"
 status = 200
+
+[functions."aggregate-pr"]
+timeout = 60
