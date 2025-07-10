@@ -115,29 +115,36 @@ exports.handler = async function(event, context) {
             if (!reviewTimes[currentTool]) reviewTimes[currentTool] = [];
             reviewTimes[currentTool].push(timeToComment);
 
-            // --- ✅ FIX STARTS HERE ---
-            // Updated regex to find 'suggestion' OR 'diff' blocks
-            const suggestionMatch = /```(suggestion|diff)\r?\n(.*?)\r?\n```/s.exec(commentBody);
+
+            const suggestionMatch = /```(suggestion|diff)\r?\n([\s\S]*?)```/s.exec(commentBody);
             let originalCode = null, suggestedCode = null;
 
             if (suggestionMatch) {
-                const blockType = suggestionMatch[1]; // 'suggestion' or 'diff'
-                const blockContent = suggestionMatch[2]; // The code inside the block
+                // The content of the code block is in the second capture group.
+                const blockContent = suggestionMatch[2];
 
-                if (blockType === 'diff') {
-                    // For diff blocks, parse added/removed lines
-                    const lines = blockContent.split('\n');
-                    originalCode = lines.filter(l => l.startsWith('-')).map(l => l.substring(1)).join('\n');
-                    suggestedCode = lines.filter(l => l.startsWith('+')).map(l => l.substring(1)).join('\n');
-                } else { // For 'suggestion' blocks
-                    suggestedCode = blockContent;
-                    // For suggestions, the original code comes from the main diff_hunk
-                    if (item.diff_hunk) {
-                        originalCode = item.diff_hunk.split('\n')
-                            .filter(line => line.startsWith('-') && !line.startsWith('---'))
-                            .map(line => line.substring(1))
-                            .join('\n');
-                    }
+                // CORRECTED LOGIC:
+                // Always treat the content of 'suggestion' and 'diff' blocks as a diff.
+                // Both contain lines starting with '+' for additions and '-' for deletions.
+                const lines = blockContent.split('\n');
+                originalCode = lines
+                    .filter(l => l.startsWith('-'))
+                    .map(l => l.substring(1))
+                    .join('\n');
+
+                suggestedCode = lines
+                    .filter(l => l.startsWith('+'))
+                    .map(l => l.substring(1))
+                    .join('\n');
+
+                // This fallback makes the logic more robust. If a suggestion block
+                // only contains additions, we can still find the original code
+                // from the comment's 'diff_hunk' provided by the GitHub API.
+                if (!originalCode && item.diff_hunk) {
+                    originalCode = item.diff_hunk.split('\n')
+                        .filter(line => line.startsWith('-') && !line.startsWith('---'))
+                        .map(line => line.substring(1))
+                        .join('\n');
                 }
             }
             // --- ✅ FIX ENDS HERE ---

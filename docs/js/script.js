@@ -126,12 +126,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function setFindingsViewMode(mode) {
         currentFindingsViewMode = mode;
-
-        // Update button active state
         viewSideBySideBtn.classList.toggle('active', mode === 'side-by-side');
         viewUnifiedBtn.classList.toggle('active', mode === 'unified');
-
-        // Re-render the findings view if data is available
         if (currentAnalysisResults) {
             renderFindings(currentAnalysisResults, activeFilters);
         }
@@ -208,6 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 findingsContainer.innerHTML = '<p class="no-data-message">No findings match the current filters.</p>';
                 return;
             }
+
             filteredFindings.forEach(finding => {
                 const hasSuggestion = finding.reviews.some(r => r.suggested_code);
                 const card = (currentFindingsViewMode === 'unified' && hasSuggestion) ? createUnifiedCard(finding) : createSideBySideCard(finding);
@@ -223,15 +220,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const card = document.createElement('div');
         card.className = 'finding-card';
         let reviewsHTML = '';
+
         finding.reviews.forEach(review => {
             const toolColor = toolColorMap.get(review.tool) || '#8B949E';
             const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
             let diffHTML = '';
+
+            // This is the trusted logic from your original script.
+            // It generates a diff view ONLY if the backend provides structured code data.
             if (review.original_code && review.suggested_code) {
                 const diffString = `--- a\n+++ b\n${review.original_code.split('\n').map(l => `-${l}`).join('\n')}\n${review.suggested_code.split('\n').map(l => `+${l}`).join('\n')}`;
                 diffHTML = Diff2Html.html(diffString, { drawFileList: false, matching: 'lines', outputFormat: 'side-by-side' });
             }
+
+            // This removes any markdown code blocks from the comment to avoid duplicating content.
             const commentText = escapeHtml(review.comment.replace(/```(suggestion|diff)[\s\S]*?```/s, ''));
+
             reviewsHTML += `
                 <div class="tool-review">
                     <h4 style="border-color: ${toolColor};"><span>${escapeHtml(review.tool)}</span>${noveltyBadge}</h4>
@@ -239,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     ${diffHTML ? `<div class="diff-container">${diffHTML}</div>` : ''}
                 </div>`;
         });
+
         card.innerHTML = `
             <div class="finding-card-header">
                 <h3><code>${escapeHtml(finding.location)}</code></h3>
@@ -247,96 +252,54 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="finding-card-body">${reviewsHTML}</div>`;
         return card;
     }
-    function extractSuggestions(comment) {
-        const suggestions = [];
-        // Regex to find ``` followed by an optional language, then the code, then ```
-        // The 's' flag allows '.' to match newlines; 'g' finds all matches.
-        const regex = /```(?:suggestion|java|diff|)\s*([\s\S]*?)```/gs;
-        let match;
-        while ((match = regex.exec(comment)) !== null) {
-            // match[1] is the captured group—the code inside the backticks.
-            const code = match[1].trim();
-            if (code) {
-                suggestions.push(code);
-            }
-        }
-        return suggestions;
-    }
+
     function createUnifiedCard(finding) {
         const card = document.createElement('div');
         card.className = 'finding-card';
 
-        // Group reviews by the original code they refer to.
-        const suggestionsByOrigin = new Map();
-        const reviewsWithoutSuggestions = [];
+        // This logic is taken directly from your original script.
+        const reviewsWithSuggestions = finding.reviews.filter(r => r.suggested_code);
+        const reviewsWithoutSuggestions = finding.reviews.filter(r => !r.suggested_code);
+        const originalCode = reviewsWithSuggestions[0]?.original_code || '';
 
-        finding.reviews.forEach(review => {
-            // 1. Actively extract all suggestions from the raw comment text.
-            const suggestions = extractSuggestions(review.comment);
+        let unifiedDiffHTML = `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
 
-            if (suggestions.length > 0 && review.original_code) {
-                if (!suggestionsByOrigin.has(review.original_code)) {
-                    suggestionsByOrigin.set(review.original_code, []);
-                }
-                // 2. Add the review, along with its list of extracted suggestions.
-                suggestionsByOrigin.get(review.original_code).push({ ...review, suggestions });
-            } else {
-                reviewsWithoutSuggestions.push(review);
-            }
-        });
-
-        let unifiedDiffHTML = '';
-        // 3. For each block of original code, create a diff table.
-        suggestionsByOrigin.forEach((reviews, originalCode) => {
-            unifiedDiffHTML += `<div class="unified-diff-container"><table class="unified-diff-table"><tbody>`;
-
-            // Render the original code block once.
+        if (originalCode) {
             originalCode.split('\n').forEach(line => {
                 unifiedDiffHTML += `<tr class="line-orig"><td class="line-num">-</td><td class="tool-name-cell"></td><td class="line-code">${escapeHtml(line)}</td></tr>`;
             });
+        }
 
-            // 4. Render ALL suggestions for this original code block.
-            reviews.forEach(review => {
-                const toolColor = toolColorMap.get(review.tool) || '#8B949E';
-                // Loop through every suggestion found for this one review.
-                review.suggestions.forEach(suggestionCode => {
-                    suggestionCode.split('\n').forEach((line, i) => {
-                        // Show the tool name only on the first line of the suggestion group.
-                        const toolName = (i === 0) ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
-                        unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
-                    });
-                });
+        reviewsWithSuggestions.forEach(review => {
+            const toolColor = toolColorMap.get(review.tool) || '#8B949E';
+            review.suggested_code.split('\n').forEach((line, i) => {
+                const toolName = i === 0 ? `<span style="color:${toolColor};">${escapeHtml(review.tool)}</span>` : '';
+                unifiedDiffHTML += `<tr class="line-sugg"><td class="line-num">+</td><td class="tool-name-cell">${toolName}</td><td class="line-code">${escapeHtml(line)}</td></tr>`;
             });
-            unifiedDiffHTML += `</tbody></table></div>`;
         });
+        unifiedDiffHTML += `</tbody></table></div>`;
 
-        // 5. Build the "Additional Comments" section for reviews that had no code.
         let otherCommentsHTML = '';
         if (reviewsWithoutSuggestions.length > 0) {
             otherCommentsHTML = '<div class="other-comments-container"><h5>Additional Comments</h5>';
             reviewsWithoutSuggestions.forEach(review => {
                 const toolColor = toolColorMap.get(review.tool) || '#8B949E';
                 const noveltyBadge = review.is_novel ? '<span class="novelty-badge">✨ Novel</span>' : '';
-                // Display the raw comment, but strip out any ``` blocks to prevent rendering broken code.
-                const commentText = escapeHtml(review.comment.replace(/```[\s\S]*?```/g, ''));
-
                 otherCommentsHTML += `
                     <div class="tool-review-small" style="border-color: ${toolColor};">
                         <h4><span>${escapeHtml(review.tool)}</span>${noveltyBadge}</h4>
-                        <blockquote>${commentText}</blockquote>
+                        <blockquote>${escapeHtml(review.comment)}</blockquote>
                     </div>`;
             });
             otherCommentsHTML += '</div>';
         }
 
-        // Assemble the final card
         card.innerHTML = `
             <div class="finding-card-header">
                 <h3><code>${escapeHtml(finding.location)}</code></h3>
                 <span class="category ${escapeHtml(finding.category.toLowerCase().replace(/\s+/g, '-'))}">${escapeHtml(finding.category)}</span>
             </div>
             <div class="finding-card-body unified">${unifiedDiffHTML}${otherCommentsHTML}</div>`;
-
         return card;
     }
 
@@ -345,13 +308,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =================================================================
-    // 5. CHART RENDERING (BULLETPROOF VERSION)
+    // 5. CHART RENDERING (Your existing functions remain here)
     // =================================================================
 
     function renderCharts(results, filters) {
         destroyAllCharts();
         assignToolColors(results.metadata.tool_names);
-
         tryAndLog(renderFindingsByToolChart, 'FindingsByToolChart', results, filters);
         tryAndLog(renderFindingsByCategoryChart, 'FindingsByCategoryChart', results, filters);
         tryAndLog(renderToolStrengthChart, 'ToolStrengthChart', results, filters);
@@ -364,252 +326,21 @@ document.addEventListener('DOMContentLoaded', () => {
         tryAndLog(renderHistoryCharts, 'HistoryCharts');
     }
 
-    function tryAndLog(fn, chartName, ...args) {
-        try {
-            fn(...args);
-        } catch (error) {
-            console.error(`Failed to render chart: ${chartName}`, error);
-        }
-    }
-
-    function destroyAllCharts() {
-        Object.values(activeCharts).forEach(chart => chart?.destroy());
-        activeCharts = {};
-    }
-
-    function assignToolColors(toolNames) {
-        const DISTINCT_COLORS = ['#58A6FF', '#F778BA', '#3FB950', '#A371F7', '#F0B939', '#48D9A4'];
-        toolColorMap.clear();
-        toolNames.forEach((toolName, index) => toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length]));
-    }
-
-    function showSkeletons(show) {
-        document.querySelectorAll('.chart-wrapper').forEach(wrapper => {
-            const canvas = wrapper.querySelector('canvas');
-            let skeleton = wrapper.querySelector('.skeleton');
-            if (show) {
-                if (canvas) canvas.style.display = 'none';
-                if (!skeleton) {
-                    skeleton = document.createElement('div');
-                    skeleton.className = 'skeleton';
-                    wrapper.appendChild(skeleton);
-                }
-            } else {
-                if (canvas) canvas.style.display = 'block';
-                skeleton?.remove();
-            }
-        });
-    }
-
-    function filterDataByTool(dataArray, allLabels, activeLabelsSet) {
-        const filtered = { labels: [], data: [] };
-        allLabels.forEach((label, i) => {
-            if (activeLabelsSet.has(label)) {
-                filtered.labels.push(label);
-                if (dataArray && dataArray[i] !== undefined) {
-                    filtered.data.push(dataArray[i]);
-                }
-            }
-        });
-        return filtered;
-    }
-
-    function renderFindingsByToolChart(results, filters) {
-        const ctx = document.getElementById('findingsByToolChart')?.getContext('2d');
-        const chartData = results.summary_charts.findings_by_tool;
-        if (!ctx || !chartData) return;
-
-        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
-        activeCharts.findingsByTool = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } }
-        });
-    }
-
-    function renderFindingsByCategoryChart(results, filters) {
-        const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d');
-        const chartData = results.summary_charts.findings_by_category;
-        if (!ctx || !chartData?.labels?.length) return;
-
-        activeCharts.findingsByCategory = new Chart(ctx, {
-            type: 'doughnut',
-            data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }] },
-            options: {
-                plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } },
-                onClick: (_, elements) => {
-                    if (elements.length > 0 && activeCharts.findingsByCategory) {
-                        const category = activeCharts.findingsByCategory.data.labels[elements[0].index];
-                        activeFilters.category = activeFilters.category === category ? null : category;
-                        tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters);
-                    }
-                }
-            }
-        });
-    }
-
-    function renderToolStrengthChart(results, filters) {
-        const ctx = document.getElementById('toolStrengthChart')?.getContext('2d');
-        const chartData = results.summary_charts.tool_strength_profile;
-        if (!ctx || !chartData) return;
-
-        const { tool_names, categories, data } = chartData;
-        const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1);
-        const filteredLabels = toolIndices.map(i => tool_names[i]);
-        const filteredData = toolIndices.map(i => data[i]);
-
-        const chartConfig = {
-            type: 'bar',
-            options: {
-                scales: { x: { stacked: true }, y: { stacked: true } },
-                plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } }
-            }
-        };
-
-        if (filters.category) {
-            const categoryIndex = categories.indexOf(filters.category);
-            chartConfig.data = {
-                labels: filteredLabels,
-                datasets: (categoryIndex > -1) ? [{
-                    label: filters.category,
-                    data: filteredData.map(d => d[categoryIndex]),
-                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5],
-                }] : []
-            };
-        } else {
-            chartConfig.data = {
-                labels: filteredLabels,
-                datasets: categories.map((cat, i) => ({
-                    label: cat,
-                    data: filteredData.map(d => d[i]),
-                    backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5],
-                }))
-            };
-        }
-
-        if (activeCharts.toolStrength) {
-            activeCharts.toolStrength.data = chartConfig.data;
-            activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text;
-            activeCharts.toolStrength.update();
-        } else {
-            activeCharts.toolStrength = new Chart(ctx, chartConfig);
-        }
-    }
-
-    function renderFindingsByFileChart(results, filters) {
-        const ctx = document.getElementById('findingsByFileChart')?.getContext('2d');
-        const chartData = results.summary_charts.findings_by_file;
-        if (!ctx || !chartData?.labels?.length) return;
-        activeCharts.findingsByFile = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } }
-        });
-    }
-
-    function renderNoveltyScoreChart(results, filters) {
-        const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d');
-        const chartData = results.summary_charts.novelty_score;
-        if (!ctx || !chartData) return;
-        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
-        activeCharts.noveltyScore = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } }
-        });
-    }
-
-    function renderFindingsDensityChart(results, filters) {
-        const ctx = document.getElementById('findingsDensityChart')?.getContext('2d');
-        const chartData = results.summary_charts.findings_density;
-        if (!ctx || !chartData) return;
-        const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools);
-        activeCharts.findingsDensity = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } }
-        });
-    }
-
-    function renderReviewSpeedChart(results, filters) {
-        const ctx = document.getElementById('reviewSpeedChart')?.getContext('2d');
-        const chartData = results.summary_charts.review_speed;
-        if (!ctx || !chartData?.labels?.length) return;
-        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
-        activeCharts.reviewSpeed = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } }
-        });
-    }
-
-    function renderCommentVerbosityChart(results, filters) {
-        const ctx = document.getElementById('commentVerbosityChart')?.getContext('2d');
-        const chartData = results.summary_charts.comment_verbosity;
-        if (!ctx || !chartData?.labels?.length) return;
-        const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools);
-        activeCharts.commentVerbosity = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] },
-            options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } }
-        });
-    }
-
-    function renderSuggestionOverlapChart(results, filters) {
-        const ctx = document.getElementById('suggestionOverlapChart')?.getContext('2d');
-        if (!ctx) return;
-        const overlaps = (results.summary_charts.suggestion_overlap || [])
-            .filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool)))
-            .sort((a, b) => b.size - a.size).slice(0, 10);
-
-        const wrapper = ctx.canvas.parentElement;
-        const existingMessage = wrapper.querySelector('.no-data-message');
-        if (existingMessage) existingMessage.remove();
-
-        if (overlaps.length === 0) {
-            const noDataMessage = document.createElement('p');
-            noDataMessage.className = 'no-data-message';
-            noDataMessage.textContent = 'No overlaps for selected tools.';
-            wrapper.appendChild(noDataMessage);
-            return;
-        }
-
-        activeCharts.suggestionOverlap = new Chart(ctx, {
-            type: 'bar',
-            data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] },
-            options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } }
-        });
-    }
-
-    async function renderHistoryCharts() {
-        const findingsCtx = document.getElementById('historyFindingsChart')?.getContext('2d');
-        const noveltyCtx = document.getElementById('historyNoveltyChart')?.getContext('2d');
-        if (!findingsCtx || !noveltyCtx) return;
-        try {
-            const response = await fetch('/api/get-history');
-            if (!response.ok) return;
-            const historyData = await response.json();
-            if (historyData.length === 0) return;
-            const tools = [...new Set(historyData.map(d => d.tool_name))];
-            assignToolColors(tools);
-            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b));
-            const createDataset = (metric) => tools.map(tool => ({
-                label: tool,
-                data: labels.map(label => {
-                    const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool);
-                    return entry ? entry[metric] : null;
-                }),
-                borderColor: toolColorMap.get(tool),
-                backgroundColor: toolColorMap.get(tool),
-                tension: 0.2,
-                spanGaps: true
-            }));
-            if(activeCharts.historyFindings) activeCharts.historyFindings.destroy();
-            activeCharts.historyFindings = new Chart(findingsCtx, { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } });
-            if(activeCharts.historyNovelty) activeCharts.historyNovelty.destroy();
-            activeCharts.historyNovelty = new Chart(noveltyCtx, { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } });
-        } catch (error) { console.error("Could not render history charts:", error); }
-    }
+    function tryAndLog(fn, chartName, ...args) { try { fn(...args); } catch (error) { console.error(`Failed to render chart: ${chartName}`, error); } }
+    function destroyAllCharts() { Object.values(activeCharts).forEach(chart => chart?.destroy()); activeCharts = {}; }
+    function assignToolColors(toolNames) { const DISTINCT_COLORS = ['#58A6FF', '#F778BA', '#3FB950', '#A371F7', '#F0B939', '#48D9A4']; toolColorMap.clear(); toolNames.forEach((toolName, index) => toolColorMap.set(toolName, DISTINCT_COLORS[index % DISTINCT_COLORS.length])); }
+    function showSkeletons(show) { document.querySelectorAll('.chart-wrapper').forEach(wrapper => { const canvas = wrapper.querySelector('canvas'); let skeleton = wrapper.querySelector('.skeleton'); if (show) { if (canvas) canvas.style.display = 'none'; if (!skeleton) { skeleton = document.createElement('div'); skeleton.className = 'skeleton'; wrapper.appendChild(skeleton); } } else { if (canvas) canvas.style.display = 'block'; skeleton?.remove(); } }); }
+    function filterDataByTool(dataArray, allLabels, activeLabelsSet) { const filtered = { labels: [], data: [] }; allLabels.forEach((label, i) => { if (activeLabelsSet.has(label)) { filtered.labels.push(label); if (dataArray && dataArray[i] !== undefined) { filtered.data.push(dataArray[i]); } } }); return filtered; }
+    function renderFindingsByToolChart(results, filters) { const ctx = document.getElementById('findingsByToolChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_tool; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.findingsByTool = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings by Tool' } } } }); }
+    function renderFindingsByCategoryChart(results, filters) { const ctx = document.getElementById('findingsByCategoryChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_category; if (!ctx || !chartData?.labels?.length) return; activeCharts.findingsByCategory = new Chart(ctx, { type: 'doughnut', data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'] }] }, options: { plugins: { title: { display: true, text: 'Findings by Category (Click to Filter)' }, legend: { position: 'right' } }, onClick: (_, elements) => { if (elements.length > 0 && activeCharts.findingsByCategory) { const category = activeCharts.findingsByCategory.data.labels[elements[0].index]; activeFilters.category = activeFilters.category === category ? null : category; tryAndLog(renderToolStrengthChart, 'ToolStrengthChartUpdate', currentAnalysisResults, activeFilters); } } } }); }
+    function renderToolStrengthChart(results, filters) { const ctx = document.getElementById('toolStrengthChart')?.getContext('2d'); const chartData = results.summary_charts.tool_strength_profile; if (!ctx || !chartData) return; const { tool_names, categories, data } = chartData; const toolIndices = tool_names.map((tool, i) => filters.tools.has(tool) ? i : -1).filter(i => i !== -1); const filteredLabels = toolIndices.map(i => tool_names[i]); const filteredData = toolIndices.map(i => data[i]); const chartConfig = { type: 'bar', options: { scales: { x: { stacked: true }, y: { stacked: true } }, plugins: { legend: { display: true }, title: { display: true, text: `Tool Strength Profile ${filters.category ? `(${filters.category})` : ''}` } } } }; if (filters.category) { const categoryIndex = categories.indexOf(filters.category); chartConfig.data = { labels: filteredLabels, datasets: (categoryIndex > -1) ? [{ label: filters.category, data: filteredData.map(d => d[categoryIndex]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][categoryIndex % 5], }] : [] }; } else { chartConfig.data = { labels: filteredLabels, datasets: categories.map((cat, i) => ({ label: cat, data: filteredData.map(d => d[i]), backgroundColor: ['#DA3633', '#238636', '#D73A49', '#1F6FEB', '#F0B939'][i % 5], })) }; } if (activeCharts.toolStrength) { activeCharts.toolStrength.data = chartConfig.data; activeCharts.toolStrength.options.plugins.title.text = chartConfig.options.plugins.title.text; activeCharts.toolStrength.update(); } else { activeCharts.toolStrength = new Chart(ctx, chartConfig); } }
+    function renderFindingsByFileChart(results, filters) { const ctx = document.getElementById('findingsByFileChart')?.getContext('2d'); const chartData = results.summary_charts.findings_by_file; if (!ctx || !chartData?.labels?.length) return; activeCharts.findingsByFile = new Chart(ctx, { type: 'bar', data: { labels: chartData.labels, datasets: [{ data: chartData.data, backgroundColor: '#A371F7' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Findings per File' } } } }); }
+    function renderNoveltyScoreChart(results, filters) { const ctx = document.getElementById('noveltyScoreChart')?.getContext('2d'); const chartData = results.summary_charts.novelty_score; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.noveltyScore = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Novelty Score (%)' } } } }); }
+    function renderFindingsDensityChart(results, filters) { const ctx = document.getElementById('findingsDensityChart')?.getContext('2d'); const chartData = results.summary_charts.findings_density; if (!ctx || !chartData) return; const filteredData = filterDataByTool(chartData, results.metadata.tool_names, filters.tools); activeCharts.findingsDensity = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Findings per 100 LoC' } } } }); }
+    function renderReviewSpeedChart(results, filters) { const ctx = document.getElementById('reviewSpeedChart')?.getContext('2d'); const chartData = results.summary_charts.review_speed; if (!ctx || !chartData?.labels?.length) return; const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools); activeCharts.reviewSpeed = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Review Speed (Avg. Seconds)' } } } }); }
+    function renderCommentVerbosityChart(results, filters) { const ctx = document.getElementById('commentVerbosityChart')?.getContext('2d'); const chartData = results.summary_charts.comment_verbosity; if (!ctx || !chartData?.labels?.length) return; const filteredData = filterDataByTool(chartData.data, chartData.labels, filters.tools); activeCharts.commentVerbosity = new Chart(ctx, { type: 'bar', data: { labels: filteredData.labels, datasets: [{ data: filteredData.data, backgroundColor: filteredData.labels.map(tool => toolColorMap.get(tool)) }] }, options: { plugins: { legend: { display: false }, title: { display: true, text: 'Comment Verbosity (Avg. Chars)' } } } }); }
+    function renderSuggestionOverlapChart(results, filters) { const ctx = document.getElementById('suggestionOverlapChart')?.getContext('2d'); if (!ctx) return; const overlaps = (results.summary_charts.suggestion_overlap || []).filter(item => item.sets.length > 1 && item.sets.every(tool => filters.tools.has(tool))).sort((a, b) => b.size - a.size).slice(0, 10); const wrapper = ctx.canvas.parentElement; const existingMessage = wrapper.querySelector('.no-data-message'); if (existingMessage) existingMessage.remove(); if (overlaps.length === 0) { const noDataMessage = document.createElement('p'); noDataMessage.className = 'no-data-message'; noDataMessage.textContent = 'No overlaps for selected tools.'; wrapper.appendChild(noDataMessage); return; } activeCharts.suggestionOverlap = new Chart(ctx, { type: 'bar', data: { labels: overlaps.map(d => d.sets.join(' & ')), datasets: [{ data: overlaps.map(d => d.size), backgroundColor: '#F87171' }] }, options: { indexAxis: 'y', plugins: { legend: { display: false }, title: { display: true, text: 'Suggestion Overlaps' } } } }); }
+    async function renderHistoryCharts() { const findingsCtx = document.getElementById('historyFindingsChart')?.getContext('2d'); const noveltyCtx = document.getElementById('historyNoveltyChart')?.getContext('2d'); if (!findingsCtx || !noveltyCtx) return; try { const response = await fetch('/api/get-history'); if (!response.ok) return; const historyData = await response.json(); if (historyData.length === 0) return; const tools = [...new Set(historyData.map(d => d.tool_name))]; assignToolColors(tools); const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b)); const createDataset = (metric) => tools.map(tool => ({ label: tool, data: labels.map(label => { const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool); return entry ? entry[metric] : null; }), borderColor: toolColorMap.get(tool), backgroundColor: toolColorMap.get(tool), tension: 0.2, spanGaps: true })); if(activeCharts.historyFindings) activeCharts.historyFindings.destroy(); activeCharts.historyFindings = new Chart(findingsCtx, { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } }); if(activeCharts.historyNovelty) activeCharts.historyNovelty.destroy(); activeCharts.historyNovelty = new Chart(noveltyCtx, { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } }); } catch (error) { console.error("Could not render history charts:", error); } }
 
     // =================================================================
     // 6. INITIALIZATION
@@ -634,8 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
         tabs.forEach(tab => tab.addEventListener('click', () => switchTab(tab.getAttribute('data-tab'))));
 
-        // --- FIX 1: Corrected Event Listeners ---
-        // The event listeners now call a dedicated function to handle the view mode change.
+        // Event listeners for the view-mode toggle buttons
         viewSideBySideBtn.addEventListener('click', () => setFindingsViewMode('side-by-side'));
         viewUnifiedBtn.addEventListener('click', () => setFindingsViewMode('unified'));
 
