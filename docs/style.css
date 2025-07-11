@@ -344,3 +344,66 @@ body {
 .tool-review-small { border-left: 3px solid; padding-left: 1rem; margin-bottom: 1rem; }
 .tool-review-small h4 { font-size: 0.9rem; margin: 0; display: flex; justify-content: space-between; }
 .tool-review-small blockquote { margin: 0.5rem 0 0 0; padding: 0; font-size: 0.9rem; }
+.file-group {
+    background-color: var(--color-bg-dark);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    margin-bottom: 1.5rem;
+    overflow: hidden; /* Ensures child borders don't poke out */
+}
+
+.file-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--color-bg-med);
+    cursor: pointer;
+    user-select: none; /* Prevents text selection on click */
+    border-bottom: 1px solid var(--color-border);
+}
+
+.file-group-header:hover {
+    background-color: var(--color-bg-light);
+}
+
+.file-group-header h3 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.file-group-header .file-meta {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+}
+
+.file-group-header .toggle-icon {
+    transition: transform 0.2s ease-in-out;
+}
+
+/* Rotate icon when section is expanded */
+.file-group-header.is-expanded .toggle-icon {
+    transform: rotate(90deg);
+}
+
+.file-group-body {
+    padding: 1.5rem;
+    /* Hide the body by default */
+    display: none;
+    border-top: 1px solid var(--color-bg-dark); /* Hides the double border */
+}
+
+/* Show the body when the group is expanded */
+.file-group-body.is-expanded {
+    display: block;
+}
+
+/* Remove margin from the last finding card in a group */
+.file-group-body .finding-card:last-child {
+    margin-bottom: 0;
+}

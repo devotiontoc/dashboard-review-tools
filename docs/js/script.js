@@ -202,8 +202,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderFindings(results, filters) {
         if (!findingsContainer) return;
+
         try {
             findingsContainer.innerHTML = '';
+
+            // First, get the findings that match the active tool filters
             const filteredFindings = results.findings
                 .map(finding => ({ ...finding, reviews: finding.reviews.filter(review => filters.tools.has(review.tool)) }))
                 .filter(finding => finding.reviews.length > 0);
@@ -213,11 +216,59 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            filteredFindings.forEach(finding => {
-                const hasSuggestion = finding.reviews.some(r => r.suggested_code);
-                const card = (currentFindingsViewMode === 'unified' && hasSuggestion) ? createUnifiedCard(finding) : createSideBySideCard(finding);
-                findingsContainer.appendChild(card);
+            // Now, group those findings by their file path
+            const groupedByFile = filteredFindings.reduce((acc, finding) => {
+                // Use the file path as a key, or "General" for non-file specific findings
+                const key = finding.location.includes(':') ? finding.location.split(':')[0] : 'General';
+                if (!acc[key]) {
+                    acc[key] = [];
+                }
+                acc[key].push(finding);
+                return acc;
+            }, {});
+
+            // Finally, render each group of findings
+            Object.entries(groupedByFile).forEach(([filePath, findingsInFile]) => {
+                // Create the main container for the file group
+                const groupEl = document.createElement('div');
+                groupEl.className = 'file-group';
+
+                // Create the clickable header
+                const headerEl = document.createElement('div');
+                headerEl.className = 'file-group-header';
+                headerEl.innerHTML = `
+                <h3><code>${escapeHtml(filePath)}</code></h3>
+                <div class="file-meta">
+                    <span>${findingsInFile.length} finding(s)</span>
+                    <i class="fas fa-chevron-right toggle-icon"></i>
+                </div>
+            `;
+
+                // Create the body that will contain the finding cards
+                const bodyEl = document.createElement('div');
+                bodyEl.className = 'file-group-body';
+
+                // Add the event listener to make it collapsible
+                headerEl.addEventListener('click', () => {
+                    headerEl.classList.toggle('is-expanded');
+                    bodyEl.classList.toggle('is-expanded');
+                });
+
+                // Create and add each finding card to this group's body
+                findingsInFile.forEach(finding => {
+                    const hasSuggestion = finding.reviews.some(r => r.suggested_code);
+                    const card = (currentFindingsViewMode === 'unified' && hasSuggestion) ? createUnifiedCard(finding) : createSideBySideCard(finding);
+                    bodyEl.appendChild(card);
+                });
+
+                // Append the header and body to the group container
+                groupEl.appendChild(headerEl);
+                groupEl.appendChild(bodyEl);
+
+                // Add the completed group to the main findings container
+                findingsContainer.appendChild(groupEl);
             });
+
         } catch (error) {
             console.error("Failed to render findings:", error);
             findingsContainer.innerHTML = '<p class="no-data-message error-message">Could not display findings due to an error.</p>';
