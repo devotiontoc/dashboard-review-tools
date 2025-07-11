@@ -656,9 +656,9 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.maintainAspectRatio = false;
 
         // Use theme colors for consistency
-        const primaryTextColor = 'var(--color-text-primary)';
-        const secondaryTextColor = 'var(--color-text-secondary)';
-        const gridAndBorderColor = 'var(--color-border)';
+        const primaryTextColor = '#C9D1D9';
+        const secondaryTextColor = '#C9D1D9';
+        const gridAndBorderColor = '#C9D1D9';
 
         // Global text color (applies to tooltips, etc.)
         Chart.defaults.color = primaryTextColor;
