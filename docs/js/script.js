@@ -580,22 +580,37 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) return;
             const historyData = await response.json();
             if (historyData.length === 0) return;
+
+            // Sort data by PR number and then by timestamp to ensure consistent order
+            historyData.sort((a, b) => {
+                if (a.pr_number === b.pr_number) {
+                    return new Date(a.timestamp) - new Date(b.timestamp);
+                }
+                return a.pr_number - b.pr_number;
+            });
+
+            // Get unique PR numbers for x-axis labels
+            const labels = [...new Set(historyData.map(d => `#${d.pr_number}`))];
             const tools = [...new Set(historyData.map(d => d.tool_name))];
             assignToolColors(tools);
-            const labels = [...new Set(historyData.map(d => new Date(d.timestamp).toLocaleDateString('en-CA')))].sort((a,b) => new Date(a) - new Date(b));
+
             const createDataset = (metric) => tools.map(tool => ({
                 label: tool,
                 data: labels.map(label => {
-                    const entry = historyData.find(d => new Date(d.timestamp).toLocaleDateString('en-CA') === label && d.tool_name === tool);
-                    return entry ? entry[metric] : null;
+                    const prNumberFromLabel = parseInt(label.substring(1)); // Extract PR number from '#PR_NUMBER'
+                    // Find the most recent entry for this tool and PR number
+                    const entriesForPrAndTool = historyData.filter(d => d.pr_number === prNumberFromLabel && d.tool_name === tool);
+                    // Get the latest entry for this PR and tool
+                    const latestEntry = entriesForPrAndTool.length > 0 ? entriesForPrAndTool[entriesForPrAndTool.length - 1] : null;
+                    return latestEntry ? latestEntry[metric] : null;
                 }),
                 borderColor: toolColorMap.get(tool),
                 backgroundColor: toolColorMap.get(tool),
                 tension: 0.2,
                 spanGaps: true
             }));
-            activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time' }, legend: {display: true} } } });
-            activeCharts.historyNovelty = new Chart(noveltyCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%)' }, legend: {display: true} } } });
+            activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time (by PR)' }, legend: {display: true} } } });
+            activeCharts.historyNovelty = new Chart(noveltyCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%) (by PR)' }, legend: {display: true} } } });
         } catch (error) { console.error("Could not render history charts:", error); }
     }
 
@@ -614,7 +629,7 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.position = 'bottom';
         Chart.defaults.plugins.legend.labels.boxWidth = 12;
         Chart.defaults.plugins.legend.labels.padding = 20;
-        Chart.defaults.plugins.legend.labels.color = 'var(--color-text-primary)';
+        Chart.defaults.plugins.legend.labels.color = '#FFFFFF';
         Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
 
         Chart.defaults.scales.category.ticks.color = 'var(--color-text-secondary)';
