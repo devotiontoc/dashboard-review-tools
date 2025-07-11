@@ -121,6 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             switchView('dashboard');
             switchTab('overview');
             dashboardControls.style.display = 'flex';
+            assignToolColors(currentAnalysisResults.metadata.tool_names);
             renderFilters(currentAnalysisResults.metadata.tool_names, activeFilters.tools);
             updateKPIs(currentAnalysisResults, activeFilters);
             renderFindings(currentAnalysisResults, activeFilters);
