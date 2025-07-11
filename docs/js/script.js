@@ -632,8 +632,14 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.labels.color = '#FFFFFF';
         Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
 
+        Chart.defaults.plugins.title.color = 'var(--color-text-header)';
         Chart.defaults.scales.category.ticks.color = 'var(--color-text-secondary)';
         Chart.defaults.scales.linear.ticks.color = 'var(--color-text-secondary)';
+        Chart.defaults.scales.category.grid.color = 'var(--color-border)';
+        Chart.defaults.scales.linear.grid.color = 'var(--color-border)';
+        Chart.defaults.elements.arc.borderColor = 'var(--color-bg-med)';
+        Chart.defaults.elements.arc.borderWidth = 2;
+
 
 
         // Attach main event listeners
