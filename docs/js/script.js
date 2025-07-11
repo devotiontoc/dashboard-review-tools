@@ -651,26 +651,47 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================
 
     function init() {
-        const chartTextColor = '#C9D1D9';
         // Set global Chart.js defaults
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
-        Chart.defaults.color = 'var(--color-text-primary)';
-        Chart.defaults.borderColor = 'var(--color-border)';
 
-        // Specific defaults for plugins and scales
+        // Use theme colors for consistency
+        const primaryTextColor = 'var(--color-text-primary)';
+        const secondaryTextColor = 'var(--color-text-secondary)';
+        const gridAndBorderColor = 'var(--color-border)';
+
+        // Global text color (applies to tooltips, etc.)
+        Chart.defaults.color = primaryTextColor;
+
+        // --- FIX STARTS HERE ---
+
+        // Defaults for Plugins (Main Title at top & Legend at bottom)
         Chart.defaults.plugins.legend.position = 'bottom';
+        Chart.defaults.plugins.legend.labels.color = primaryTextColor;
         Chart.defaults.plugins.legend.labels.boxWidth = 12;
         Chart.defaults.plugins.legend.labels.padding = 20;
-        Chart.defaults.plugins.legend.labels.color = '#FFFFFF';
-        Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
+        Chart.defaults.plugins.title.color = primaryTextColor;
 
+        // Defaults for Scales (Axes, Titles like "Total Findings", and Grid Lines)
+        const scaleDefaults = {
+            // Text for the axis labels themselves (e.g., PR numbers, counts)
+            ticks: {
+                color: secondaryTextColor
+            },
+            // Title for the axis (e.g., "Total Findings", "Pull Request")
+            title: {
+                color: primaryTextColor
+            },
+            // Background grid lines
+            grid: {
+                color: gridAndBorderColor,
+                borderColor: gridAndBorderColor // Also targets the axis line
+            },
+        };
 
-        Chart.defaults.plugins.legend.labels.color = chartTextColor; // Apply to legend
-        Chart.defaults.plugins.title.color = chartTextColor; // Apply to title
-
-        Chart.defaults.scales.category.ticks.color = chartTextColor;
-        Chart.defaults.scales.linear.ticks.color = chartTextColor;
+        // Apply the same defaults to all scale types you use
+        Chart.defaults.scales.category = { ...scaleDefaults };
+        Chart.defaults.scales.linear = { ...scaleDefaults };
 
 
         // Attach main event listeners
