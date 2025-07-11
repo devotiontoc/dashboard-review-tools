@@ -664,8 +664,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Global text color (applies to tooltips, etc.)
         Chart.defaults.color = primaryTextColor;
 
-        // --- FIX STARTS HERE ---
-
         // Defaults for Plugins (Main Title at top & Legend at bottom)
         Chart.defaults.plugins.legend.position = 'bottom';
         Chart.defaults.plugins.legend.labels.color = primaryTextColor;
@@ -673,16 +671,27 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.labels.padding = 20;
         Chart.defaults.plugins.title.color = primaryTextColor;
 
+        Chart.defaults.scales = Chart.defaults.scales || {};
+
+        // -- Category Scale --
+        Chart.defaults.scales.category = Chart.defaults.scales.category || {};
+        Chart.defaults.scales.category.ticks = Chart.defaults.scales.category.ticks || {};
+        Chart.defaults.scales.category.title = Chart.defaults.scales.category.title || {};
+        Chart.defaults.scales.category.grid = Chart.defaults.scales.category.grid || {};
+
         Chart.defaults.scales.category.ticks.color = secondaryTextColor;
         Chart.defaults.scales.category.title.color = primaryTextColor;
         Chart.defaults.scales.category.grid.color = gridAndBorderColor;
-        Chart.defaults.scales.category.grid.borderColor = gridAndBorderColor;
 
-        // For 'linear' type axes (like numeric counts)
+        // -- Linear Scale --
+        Chart.defaults.scales.linear = Chart.defaults.scales.linear || {};
+        Chart.defaults.scales.linear.ticks = Chart.defaults.scales.linear.ticks || {};
+        Chart.defaults.scales.linear.title = Chart.defaults.scales.linear.title || {};
+        Chart.defaults.scales.linear.grid = Chart.defaults.scales.linear.grid || {};
+
         Chart.defaults.scales.linear.ticks.color = secondaryTextColor;
         Chart.defaults.scales.linear.title.color = primaryTextColor;
         Chart.defaults.scales.linear.grid.color = gridAndBorderColor;
-        Chart.defaults.scales.linear.grid.borderColor = gridAndBorderColor;
 
 
         // Attach main event listeners
