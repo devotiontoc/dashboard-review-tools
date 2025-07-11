@@ -51,6 +51,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!currentAnalysisResults?.metadata || !currentAnalysisResults?.summary_charts || !currentAnalysisResults?.findings) {
                 throw new Error("Received incomplete or malformed analysis data from the API.");
             }
+
+            fetch('/api/save-analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(currentAnalysisResults)
+            }).catch(err => console.error("History Save Failed:", err)); // Log error but don't stop UI
+
             activeFilters.tools = new Set(currentAnalysisResults.metadata.tool_names);
             activeFilters.category = null;
             renderUI();
@@ -577,41 +584,63 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!findingsCanvas || !noveltyCanvas) return;
         try {
             const response = await fetch('/api/get-history');
-            if (!response.ok) return;
+            if (!response.ok) throw new Error('Failed to fetch history');
             const historyData = await response.json();
-            if (historyData.length === 0) return;
 
-            // Sort data by PR number and then by timestamp to ensure consistent order
-            historyData.sort((a, b) => {
-                if (a.pr_number === b.pr_number) {
-                    return new Date(a.timestamp) - new Date(b.timestamp);
-                }
-                return a.pr_number - b.pr_number;
-            });
+            if (historyData.length === 0) {
+                const msg = '<p class="no-data-message">No historical data available.</p>';
+                if (findingsCanvas.parentElement) findingsCanvas.parentElement.innerHTML = msg;
+                if (noveltyCanvas.parentElement) noveltyCanvas.parentElement.innerHTML = msg;
+                return;
+            }
 
-            // Get unique PR numbers for x-axis labels
-            const labels = [...new Set(historyData.map(d => `#${d.pr_number}`))];
             const tools = [...new Set(historyData.map(d => d.tool_name))];
             assignToolColors(tools);
 
-            const createDataset = (metric) => tools.map(tool => ({
-                label: tool,
-                data: labels.map(label => {
-                    const prNumberFromLabel = parseInt(label.substring(1)); // Extract PR number from '#PR_NUMBER'
-                    // Find the most recent entry for this tool and PR number
-                    const entriesForPrAndTool = historyData.filter(d => d.pr_number === prNumberFromLabel && d.tool_name === tool);
-                    // Get the latest entry for this PR and tool
-                    const latestEntry = entriesForPrAndTool.length > 0 ? entriesForPrAndTool[entriesForPrAndTool.length - 1] : null;
-                    return latestEntry ? latestEntry[metric] : null;
-                }),
-                borderColor: toolColorMap.get(tool),
-                backgroundColor: toolColorMap.get(tool),
-                tension: 0.2,
-                spanGaps: true
-            }));
-            activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('finding_count') }, options: { plugins: { title: { display: true, text: 'Findings Over Time (by PR)' }, legend: {display: true} } } });
-            activeCharts.historyNovelty = new Chart(noveltyCanvas.getContext('2d'), { type: 'line', data: { labels, datasets: createDataset('novelty_score') }, options: { plugins: { title: { display: true, text: 'Novelty Score Over Time (%) (by PR)' }, legend: {display: true} } } });
-        } catch (error) { console.error("Could not render history charts:", error); }
+            const prNumbers = [...new Set(historyData.map(d => d.pr_number))].sort((a, b) => a - b);
+            const labels = prNumbers.map(pr => `#${pr}`);
+
+            const createDataset = (metric) => tools.map(tool => {
+                const data = prNumbers.map(prNum => {
+                    const entry = historyData.find(d => d.pr_number === prNum && d.tool_name === tool);
+                    return entry ? entry[metric] : null;
+                });
+                return {
+                    label: tool,
+                    data: data,
+                    borderColor: toolColorMap.get(tool),
+                    backgroundColor: toolColorMap.get(tool),
+                    tension: 0.2,
+                    spanGaps: true
+                };
+            });
+
+            const chartOptions = (titleText, yAxisText) => ({
+                plugins: {
+                    title: { display: true, text: titleText },
+                    legend: { display: true }
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Pull Request' } },
+                    y: { title: { display: true, text: yAxisText }, beginAtZero: true }
+                }
+            });
+
+            destroyAllCharts(); // Destroy all, including history, to be safe
+
+            activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), {
+                type: 'line',
+                data: { labels, datasets: createDataset('finding_count') },
+                options: chartOptions('Findings Over Time by PR', 'Total Findings')
+            });
+            activeCharts.historyNovelty = new Chart(noveltyCanvas.getContext('2d'), {
+                type: 'line',
+                data: { labels, datasets: createDataset('novelty_score') },
+                options: chartOptions('Novelty Score Over Time by PR (%)', 'Novelty Score (%)')
+            });
+        } catch (error) {
+            console.error("Could not render history charts:", error);
+        }
     }
 
     // =================================================================
@@ -619,6 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // =================================================================
 
     function init() {
+        const chartTextColor = '#C9D1D9';
         // Set global Chart.js defaults
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
@@ -632,14 +662,12 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.labels.color = '#FFFFFF';
         Chart.defaults.plugins.title.color = 'var(--color-text-primary)';
 
-        Chart.defaults.plugins.title.color = 'var(--color-text-header)';
-        Chart.defaults.scales.category.ticks.color = 'var(--color-text-secondary)';
-        Chart.defaults.scales.linear.ticks.color = 'var(--color-text-secondary)';
-        Chart.defaults.scales.category.grid.color = 'var(--color-border)';
-        Chart.defaults.scales.linear.grid.color = 'var(--color-border)';
-        Chart.defaults.elements.arc.borderColor = 'var(--color-bg-med)';
-        Chart.defaults.elements.arc.borderWidth = 2;
 
+        Chart.defaults.plugins.legend.labels.color = chartTextColor; // Apply to legend
+        Chart.defaults.plugins.title.color = chartTextColor; // Apply to title
+
+        Chart.defaults.scales.category.ticks.color = chartTextColor;
+        Chart.defaults.scales.linear.ticks.color = chartTextColor;
 
 
         // Attach main event listeners
