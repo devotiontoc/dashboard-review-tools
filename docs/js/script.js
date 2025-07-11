@@ -673,25 +673,16 @@ document.addEventListener('DOMContentLoaded', () => {
         Chart.defaults.plugins.legend.labels.padding = 20;
         Chart.defaults.plugins.title.color = primaryTextColor;
 
-        // Defaults for Scales (Axes, Titles like "Total Findings", and Grid Lines)
-        const scaleDefaults = {
-            // Text for the axis labels themselves (e.g., PR numbers, counts)
-            ticks: {
-                color: secondaryTextColor
-            },
-            // Title for the axis (e.g., "Total Findings", "Pull Request")
-            title: {
-                color: primaryTextColor
-            },
-            // Background grid lines
-            grid: {
-                color: gridAndBorderColor,
-                borderColor: gridAndBorderColor // Also targets the axis line
-            },
-        };
+        Chart.defaults.scales.category.ticks.color = secondaryTextColor;
+        Chart.defaults.scales.category.title.color = primaryTextColor;
+        Chart.defaults.scales.category.grid.color = gridAndBorderColor;
+        Chart.defaults.scales.category.grid.borderColor = gridAndBorderColor;
 
-        Chart.defaults.scales.category = { ...Chart.defaults.scales.category, ...scaleDefaults };
-        Chart.defaults.scales.linear = { ...Chart.defaults.scales.linear, ...scaleDefaults };
+        // For 'linear' type axes (like numeric counts)
+        Chart.defaults.scales.linear.ticks.color = secondaryTextColor;
+        Chart.defaults.scales.linear.title.color = primaryTextColor;
+        Chart.defaults.scales.linear.grid.color = gridAndBorderColor;
+        Chart.defaults.scales.linear.grid.borderColor = gridAndBorderColor;
 
 
         // Attach main event listeners

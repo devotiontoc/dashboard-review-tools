@@ -18,9 +18,7 @@ export default async (req) => {
         await sql.transaction(async (tx) => {
             for (let i = 0; i < tool_names.length; i++) {
                 const tool = tool_names[i];
-                // ID should be consistent for a given PR and tool
                 const record_id = `${pr_number}-${tool}`;
-
                 const finding_count = summary_charts.findings_by_tool[i] || 0;
                 const novelty_score = summary_charts.novelty_score[i] || 0;
                 const findings_density = summary_charts.findings_density[i] || 0;
@@ -28,11 +26,11 @@ export default async (req) => {
                 await tx`
                     INSERT INTO analysis_history (id, pr_number, tool_name, timestamp, finding_count, novelty_score, findings_density)
                     VALUES (${record_id}, ${pr_number}, ${tool}, ${timestamp}, ${finding_count}, ${novelty_score}, ${findings_density})
-                    ON CONFLICT (pr_number, tool_name) DO UPDATE SET
-                        timestamp = EXCLUDED.timestamp,
-                        finding_count = EXCLUDED.finding_count,
-                        novelty_score = EXCLUDED.novelty_score,
-                        findings_density = EXCLUDED.findings_density;
+                        ON CONFLICT ON CONSTRAINT unique_pr_tool DO UPDATE SET
+                                                                        timestamp = EXCLUDED.timestamp,
+                                                                        finding_count = EXCLUDED.finding_count,
+                                                                        novelty_score = EXCLUDED.novelty_score,
+                                                                        findings_density = EXCLUDED.findings_density;
                 `;
             }
         });
