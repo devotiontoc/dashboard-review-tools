@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderCharts(results, filters) {
         destroyAllCharts();
-        assignToolColors(results.metadata.tool_names);
+        //assignToolColors(results.metadata.tool_names);
 
         tryAndLog(renderFindingsByToolChart, 'FindingsByToolChart', results, filters);
         tryAndLog(renderFindingsByCategoryChart, 'FindingsByCategoryChart', results, filters);
@@ -690,9 +690,8 @@ document.addEventListener('DOMContentLoaded', () => {
             },
         };
 
-        // Apply the same defaults to all scale types you use
-        Chart.defaults.scales.category = { ...scaleDefaults };
-        Chart.defaults.scales.linear = { ...scaleDefaults };
+        Chart.defaults.scales.category = { ...Chart.defaults.scales.category, ...scaleDefaults };
+        Chart.defaults.scales.linear = { ...Chart.defaults.scales.linear, ...scaleDefaults };
 
 
         // Attach main event listeners
