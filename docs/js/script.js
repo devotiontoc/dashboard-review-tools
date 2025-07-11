@@ -582,21 +582,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const findingsCanvas = prepareCanvas('historyFindingsChart');
         const noveltyCanvas = prepareCanvas('historyNoveltyChart');
         if (!findingsCanvas || !noveltyCanvas) return;
+
         try {
             const response = await fetch('/api/get-history');
             if (!response.ok) throw new Error('Failed to fetch history');
             const historyData = await response.json();
 
-            if (historyData.length === 0) {
+            if (!historyData || historyData.length === 0) {
                 const msg = '<p class="no-data-message">No historical data available.</p>';
                 if (findingsCanvas.parentElement) findingsCanvas.parentElement.innerHTML = msg;
                 if (noveltyCanvas.parentElement) noveltyCanvas.parentElement.innerHTML = msg;
                 return;
             }
 
+            // Get all unique tools from the entire history to ensure all are plotted
             const tools = [...new Set(historyData.map(d => d.tool_name))];
+            // Re-assign colors based on ALL historical tools to override any dashboard filters
             assignToolColors(tools);
 
+            // Get unique PR numbers and sort them for the X-axis
             const prNumbers = [...new Set(historyData.map(d => d.pr_number))].sort((a, b) => a - b);
             const labels = prNumbers.map(pr => `#${pr}`);
 
@@ -611,22 +615,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     borderColor: toolColorMap.get(tool),
                     backgroundColor: toolColorMap.get(tool),
                     tension: 0.2,
-                    spanGaps: true
+                    spanGaps: true // Connects lines across gaps for a cleaner look
                 };
             });
 
             const chartOptions = (titleText, yAxisText) => ({
                 plugins: {
                     title: { display: true, text: titleText },
-                    legend: { display: true }
+                    legend: { display: true, position: 'bottom' }
                 },
                 scales: {
                     x: { title: { display: true, text: 'Pull Request' } },
                     y: { title: { display: true, text: yAxisText }, beginAtZero: true }
                 }
             });
-
-            destroyAllCharts(); // Destroy all, including history, to be safe
 
             activeCharts.historyFindings = new Chart(findingsCanvas.getContext('2d'), {
                 type: 'line',
@@ -638,6 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 data: { labels, datasets: createDataset('novelty_score') },
                 options: chartOptions('Novelty Score Over Time by PR (%)', 'Novelty Score (%)')
             });
+
         } catch (error) {
             console.error("Could not render history charts:", error);
         }
